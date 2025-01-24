@@ -10,14 +10,14 @@ from tools.tool import too
 '''
     @ Author: LiuShan
     @ Date: 2024.09.04
-    @ Description: 服务器运维管理工具类
+    @ Description: 主机运维管理工具类
 '''
 
 # 创建主窗口
 class infoServer:
     def __init__(self, master):
         self.master = master    # 窗口
-        self.master.title("服务器运维管理工具    V1.0.20240906  Demo公测版 -Liu")
+        self.master.title("主机运维管理工具    V1.0.20250124  Demo公测版 -Liu")
         self.master.geometry('1280x720+50+0')   #将该行代码修改为分辨率可自定义调整窗口大小
         self.master.resizable(width=True, height=True)
         self.master.iconphoto(True, tk.PhotoImage(file='./img/top.png'))
@@ -182,7 +182,7 @@ class infoServer:
 
         # 左键双击事件
         # self.group_tree.bind("<Double-1>", self.groupTree_click)
-        # self.server_tree.bind("<Double-1>" ,lambda event: self.connect_server(event))
+        self.server_tree.bind("<Double-1>" ,lambda event: self.connect_server(event))
 
         # server_tree焦点变更事件
         self.server_tree.bind("<<TreeviewSelect>>", self.on_selection_change)
@@ -655,7 +655,7 @@ class infoServer:
             pass
            
     # 连接主机
-    def connect_server(self):
+    def connect_server(self,event=None):
         self.log.write_log_info('事件触发：连接主机')
         #获取选择的主机信息
         selected_item = self.server_tree.focus()
@@ -665,12 +665,12 @@ class infoServer:
             return
         connect_type = self.server_tree.item(selected_item)['values'][0]
         if connect_type == 'RDP':
-            # name = self.server_tree.item(selected_item)['values'][1]
+            name = self.server_tree.item(selected_item)['values'][1]
             host = self.server_tree.item(selected_item)['values'][2]
             port = self.server_tree.item(selected_item)['values'][3]
-            # username = self.server_tree.item(selected_item)['values'][4]
-            # password = self.db.get_server_password(name)
-            self.too.run_mstsc(host,port)
+            username = self.server_tree.item(selected_item)['values'][4]
+            password = self.server_tree.item(selected_item)['values'][5]
+            self.too.run_mstsc(host,port,username,password)
         elif connect_type == 'SSH':
             host = self.server_tree.item(selected_item)['values'][2]
             port = self.server_tree.item(selected_item)['values'][3]
