@@ -1,0 +1,23 @@
+# ServerRemoteInfoManager 依赖配置
+# ============================================
+# Python 版本：3.10.11（从 3.8.5 升级）
+# 操作系统：Windows 10 / 11 64 位
+#
+# 本项目仅使用 Python 标准库，运行时无第三方 pip 依赖：
+#   tkinter      (GUI)
+#   sqlite3      (数据库)
+#   os / re      (系统与正则)
+#   threading    (多线程)
+#   subprocess   (调用 mstsc)
+#   datetime     (时间)
+#   webbrowser   (打开浏览器)
+#
+# 以下为开发与打包阶段可选工具，非运行必需：
+# ============================================
+
+# 打包为 Windows 可执行文件（可选）
+pyinstaller==6.3.0
+
+# 代码格式化（可选，开发阶段）
+# black==23.12.1
+# flake8==7.0.0

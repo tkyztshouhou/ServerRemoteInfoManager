@@ -6,6 +6,7 @@ import os
 import subprocess
 import threading
 import time
+import re
 
 
 '''
@@ -15,17 +16,16 @@ import time
 '''
 
 class too:
-    def __init__(self):
-        pass
+    def __init__(self, db_path=None):
+        self.db_path = db_path
 
     # 多线程序
-    def thread_it(self,func, *args):
+    def thread_it(self,func, *args, **kwargs):
         '''将函数打包进线程'''
         # 创建
-        t = threading.Thread(target=func, args=args)
-        # 守护 !!!
-        t.setDaemon(True)
-        # 启动
+        t = threading.Thread(target=func, args=args, kwargs=kwargs)
+        # B22: 使用 daemon 属性替代已废弃的 setDaemon()
+        t.daemon = True
         t.start()
         # 阻塞--卡死界面！
         # t.join()
@@ -60,15 +60,16 @@ class too:
     
     # 正则匹配是否是ip
     def is_ip(self,ip):
-        import re
+        # B23: 延迟导入 logs 类，避免循环导入
         from tools.logs import logs
         self.log = logs()
         ip_re = re.compile(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$')
         if ip_re.match(ip):
-            self.log.write_log_error('ip格式正确: ' + ip)
+            # B24: 格式正确使用 INFO，格式错误使用 WARNING
+            self.log.write_log_info('ip格式正确: ' + ip)
             return True
         else:
-            self.log.write_log_info('ip格式错误: ' + ip)
+            self.log.write_log_error('ip格式错误: ' + ip)
             return False
 
     # 运行mstsc
@@ -141,6 +142,137 @@ class too:
         subprocess.call(cmd)
         return True
     '''
+    # 运行SSH（支持多种终端工具）
+    def run_ssh(self, host, port, username, password, callback=None):
+        """根据配置的 SSH 工具类型执行连接，支持 XTerminal、PuTTY(plink)、MobaXterm、FinalShell、Xshell"""
+        from Object.gui_DA import DataAccess
+        da = DataAccess(self.db_path)
+        ssh_tool_type = da.get_setting('ssh_tool_type') or 'XTerminal'
+
+        # 兼容旧版本保存的小写工具类型值
+        legacy_map = {
+            'xterm': 'XTerminal', 'plink': 'PuTTY(plink)', 'mobaxterm': 'MobaXterm',
+            'finalshell': 'FinalShell', 'xshell': 'Xshell',
+        }
+        ssh_tool_type = legacy_map.get(ssh_tool_type, ssh_tool_type)
+
+        # 工具类型 -> 独立路径设置键（与设置窗口保存的键名一致）
+        path_keys = {
+            'XTerminal': 'ssh_tool_path_xterm',
+            'PuTTY(plink)': 'ssh_tool_path_plink',
+            'MobaXterm': 'ssh_tool_path_mobaxterm',
+            'FinalShell': 'ssh_tool_path_finalshell',
+            'Xshell': 'ssh_tool_path_xshell',
+        }
+        tool_path = da.get_setting(path_keys.get(ssh_tool_type, 'ssh_tool_path_xterm'), '')
+
+        try:
+            if ssh_tool_type == 'PuTTY(plink)':
+                tool = tool_path or 'plink'
+                cmd = f'"{tool}" -P {port} -l {username} -pw {password} {host}'
+            elif ssh_tool_type == 'MobaXterm':
+                tool = tool_path or 'MobaXterm.exe'
+                cmd = f'"{tool}" -ssh {username}@{host}:{port}'
+            elif ssh_tool_type == 'FinalShell':
+                tool = tool_path or 'finalshell.exe'
+                cmd = f'"{tool}" -h {host} -p {port} -u {username} -pw {password}'
+            elif ssh_tool_type == 'Xshell':
+                tool = tool_path or 'Xshell.exe'
+                cmd = f'"{tool}" -url ssh://{username}:{password}@{host}:{port}'
+            else:
+                # XTerminal：使用配置的工具路径直接启动，传入 ssh:// URL
+                tool = tool_path or 'XTerminal.exe'
+                cmd = f'"{tool}" "ssh://{username}@{host}:{port}"'
+
+            # 检查工具文件是否存在
+            import os
+            if not os.path.exists(tool):
+                error_msg = f"SSH连接失败：工具文件不存在\n\n工具路径：{tool}\n\n请检查工具路径是否正确，或重新配置SSH工具路径。"
+                print(error_msg)
+                if callback:
+                    callback(error_msg)
+                return False
+
+            self.thread_it(subprocess.Popen, cmd, shell=True)
+            return True
+        except Exception as e:
+            # 提供更友好的错误信息
+            if "不是内部或外部命令" in str(e) or "not found" in str(e):
+                error_msg = f"SSH连接失败：工具无法启动\n\n错误：{e}\n\n请检查工具路径是否正确，或重新配置SSH工具路径。"
+            elif "权限" in str(e) or "permission" in str(e):
+                error_msg = f"SSH连接失败：权限不足\n\n错误：{e}\n\n请检查工具文件的访问权限。"
+            else:
+                error_msg = f"SSH连接失败：{e}"
+            
+            print(error_msg)
+            if callback:
+                callback(error_msg)
+            return False
+
+    # 运行VNC（vncviewer）
+    def run_vnc(self, host, port, callback=None):
+        """调用 vncviewer 进行 VNC 连接"""
+        try:
+            # 检查工具文件是否存在
+            import os
+            vncviewer_path = 'vncviewer'
+            if not os.path.exists(vncviewer_path):
+                error_msg = f"VNC连接失败：工具文件不存在\n\n工具路径：{vncviewer_path}\n\n请确保系统已安装VNC客户端，或重新配置VNC工具路径。"
+                print(error_msg)
+                if callback:
+                    callback(error_msg)
+                return False
+
+            addr = f"{host}:{port}"
+            cmd = ['vncviewer', addr]
+            self.thread_it(subprocess.Popen, cmd)
+            return True
+        except Exception as e:
+            # 提供更友好的错误信息
+            if "不是内部或外部命令" in str(e) or "not found" in str(e):
+                error_msg = f"VNC连接失败：工具无法启动\n\n错误：{e}\n\n请确保系统已安装VNC客户端，或重新配置VNC工具路径。"
+            elif "权限" in str(e) or "permission" in str(e):
+                error_msg = f"VNC连接失败：权限不足\n\n错误：{e}\n\n请检查工具文件的访问权限。"
+            else:
+                error_msg = f"VNC连接失败：{e}"
+            
+            print(error_msg)
+            if callback:
+                callback(error_msg)
+            return False
+
+    # 运行Radmin连接
+    def run_radmin(self, host, port, callback=None):
+        """调用 Radmin 进行远程连接"""
+        try:
+            # 检查工具文件是否存在
+            import os
+            radmin_path = 'radmin.exe'
+            if not os.path.exists(radmin_path):
+                error_msg = f"Radmin连接失败：工具文件不存在\n\n工具路径：{radmin_path}\n\n请确保系统已安装Radmin客户端，或重新配置Radmin工具路径。"
+                print(error_msg)
+                if callback:
+                    callback(error_msg)
+                return False
+
+            # Radmin连接命令：radmin.exe /connect:地址:端口
+            cmd = f'"{radmin_path}" /connect:{host}:{port}'
+            self.thread_it(subprocess.Popen, cmd, shell=True)
+            return True
+        except Exception as e:
+            # 提供更友好的错误信息
+            if "不是内部或外部命令" in str(e) or "not found" in str(e):
+                error_msg = f"Radmin连接失败：工具无法启动\n\n错误：{e}\n\n请确保系统已安装Radmin客户端，或重新配置Radmin工具路径。"
+            elif "权限" in str(e) or "permission" in str(e):
+                error_msg = f"Radmin连接失败：权限不足\n\n错误：{e}\n\n请检查工具文件的访问权限。"
+            else:
+                error_msg = f"Radmin连接失败：{e}"
+            
+            print(error_msg)
+            if callback:
+                callback(error_msg)
+            return False
+
     # 打开浏览器
     def open_browser(self,url):
         import webbrowser

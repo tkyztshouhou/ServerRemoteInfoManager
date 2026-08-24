@@ -17,12 +17,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'LiuShan'),
             StringStruct('FileDescription', '服务器运维管理工具'),
-            StringStruct('FileVersion', '1.0.20240906'),
+            StringStruct('FileVersion', '2.0.20260824'),
             StringStruct('InternalName', 'app'),
             StringStruct('LegalCopyright', '© Liu Copyright Information'),
             StringStruct('OriginalFilename', 'app.exe'),
             StringStruct('ProductName', '服务器运维管理工具'),
-            StringStruct('ProductVersion', '1.0.20240906')
+            StringStruct('ProductVersion', '2.0.20260824')
           ]
         )
       ]

@@ -1,5 +1,4 @@
 import os
-from tools.tool import too
 
 '''
     日志记录
@@ -7,36 +6,33 @@ from tools.tool import too
 
 class logs:
     def __init__(self):
+        # 延迟导入 too 类，避免循环导入
+        from tools.tool import too
         self.too = too()
-        self.log_path = os.path.join(os.getcwd(), 'logs')
+        self.log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'logs')
+        # B25: 简化初始化逻辑，移除重复赋值和调试行
         if not os.path.exists(self.log_path):
-            self.day = self.too.time_day()
-            os.mkdir(self.log_path)
-            self.log_file = open(os.path.join(self.log_path, self.day + 'log.txt'), 'w')
-            self.log_file.close()
-        else:
-            self.day = self.too.time_day()
-            self.time = self.too.time()
-            self.log_file = open(os.path.join(self.log_path, self.day + 'log.txt'), 'a')
-            self.log_file.write(self.time + " : ----- DEBUG 日志文件存在\n")
-            self.log_file.close()
+            os.makedirs(self.log_path)
+        self.day = self.too.time_day()
+        self.log_file_path = os.path.join(self.log_path, self.day + 'log.txt')
+        # 确保日志文件存在
+        if not os.path.exists(self.log_file_path):
+            with open(self.log_file_path, 'w'):
+                pass
         
-    # 写入日志
+    # 写入日志 - B26: 使用 with 语句管理文件，确保异常时文件正确关闭
     def write_log(self, message):
-        self.time = self.too.time()
-        self.log_file = open(os.path.join(self.log_path, self.day + 'log.txt'), 'a')
-        self.log_file.write(self.time + " : -----" + message + "\n")
-        self.log_file.close()
+        log_line = f"{self.too.time()} : ----- {message}\n"
+        with open(self.log_file_path, 'a', encoding='utf-8') as f:
+            f.write(log_line)
     
     def write_log_error(self, message):
-        self.time = self.too.time()
-        self.log_file = open(os.path.join(self.log_path, self.day + 'log.txt'), 'a')
-        self.log_file.write(self.time + " : ----- ERROR: " + message + "\n")
-        self.log_file.close()
+        log_line = f"{self.too.time()} : ----- ERROR: {message}\n"
+        with open(self.log_file_path, 'a', encoding='utf-8') as f:
+            f.write(log_line)
     
     def write_log_info(self, message):
-        self.time = self.too.time()
-        self.log_file = open(os.path.join(self.log_path, self.day + 'log.txt'), 'a')
-        self.log_file.write(self.time + " : ----- INFO: " + message + "\n")
-        self.log_file.close()
+        log_line = f"{self.too.time()} : ----- INFO: {message}\n"
+        with open(self.log_file_path, 'a', encoding='utf-8') as f:
+            f.write(log_line)
 

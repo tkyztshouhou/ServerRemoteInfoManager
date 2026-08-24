@@ -1,12 +1,12 @@
-# Byte-compiled / optimized / DLL files
+# ServerRemoteInfoManager - Git Ignore File
+# =======================================
+
+# Python 相关
+# ============
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -20,81 +20,162 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# 虚拟环境
+serverVenv/
+venv/
+env/
+.venv/
+ENV/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
 
-# Unit test / coverage reports
+# 日志文件
+logs/
+*.log
+log.txt
+
+# 测试文件
+test.db
+*_test.py
+
+# 临时文件
+*.tmp
+*.temp
+.temp/
+.tmp/
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE 和编辑器
+# ==============
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# PyCharm
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+settings.json
+launch.json
+tasks.json
+extensions.json
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# 开发工具
+coverage.xml
 htmlcov/
 .tox/
-.nox/
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
 .hypothesis/
-.pytest_cache/
 
-# Translations
-*.mo
-*.pot
+# 环境配置
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+config.py
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# 构建和打包
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.app
+*.app/
 
-# Flask stuff:
-instance/
-.webassets-cache
+# 图像和资源缓存
+img/cache/
+img/tmp/
+*.cache
 
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
+# 开发文档
 docs/_build/
+docs/build/
 
-# PyBuilder
-target/
+# 备份文件
+*.bak
+*.backup
+*.old
+
+# 压缩文件
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.tar.bz2
+
+# 用户生成的文件
+*.user
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.pdb
+
+# 临时目录
+.tmp/
+.temp/
+cache/
+
+# OS 生成文件
+.fuse_hidden*
+.Trash-*
+.directory
+
+# Python 特定
+# ==============
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
 
 # pyenv
 .python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+Pipfile.lock
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+# PEP 582
 __pypackages__/
 
-# Celery stuff
+# Celery
 celerybeat-schedule
 celerybeat.pid
 
@@ -110,10 +191,6 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
 # Rope project settings
 .ropeproject
 
@@ -127,3 +204,28 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# 项目特定忽略
+# ==============
+# 本地数据库文件
+data.db
+
+# 开发工具生成的文件
+*.log
+*.log.*
+
+# 临时测试文件
+test_*.db
+temp_*.db
+
+# 用户配置文件（如果包含敏感信息）
+config.ini
+settings.ini
+
+# 备份文件
+backup_*.db
+*.bak
+
+# 开发环境特定
+local_*.py
+dev_*.py
