@@ -207,6 +207,9 @@ dmypy.json
 
 # 项目特定忽略
 # ==============
+# CodeBuddy 计划目录（本地开发数据，无需同步）
+.codebuddy/plans/
+
 # 本地数据库文件
 data.db
 
