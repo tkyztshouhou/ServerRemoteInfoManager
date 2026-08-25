@@ -58,6 +58,8 @@ class DataAccess:
                 ('ui_font_color', '#000000'),  # 任务3: 字体颜色
                 ('ui_info_bg_color', '#FFFFFF'),  # 任务3: 服务器说明背景色
                 ('ui_search_bg_color', '#FFFFFF'),  # 任务3: 搜索框背景色
+                ('server_info_font_size', ''),  # F: 服务器说明字体大小（空表示使用全局字体大小）
+                ('server_info_font_color', ''),  # F: 服务器说明字体颜色（空表示使用全局字体颜色）
                 ('ssh_tool_type', 'xterm'),
             ]
             for key, value in default_settings:
@@ -115,6 +117,8 @@ class DataAccess:
     # 初始化组数据
     def init_groups_data(self, tree, folder_closed, folder_open):
         try:
+            # 清空之前的树数据
+            tree.delete(*tree.get_children())
             conn = sqlite3.connect(self.db)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM groups")
@@ -157,7 +161,7 @@ class DataAccess:
             results = cursor.fetchall()
             for r in results:
                 icon = icon_func(r[1]) if icon_func else None
-                tree.insert('', "end", image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], r[6], ''))
+                tree.insert('', "end", image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
             cursor.close()
             conn.close()
             # B27: 移除调试输出，保留日志记录

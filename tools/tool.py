@@ -72,37 +72,187 @@ class too:
             self.log.write_log_error('ip格式错误: ' + ip)
             return False
 
+    # F15: 清理残留的 RDP 凭据
+    def cleanup_rdp_credentials(self):
+        """清理凭据管理器中已删除服务器的 RDP 凭据残留"""
+        try:
+            # 获取所有 TERMSRV 凭据
+            result = subprocess.run(
+                ['cmdkey', '/list'],
+                capture_output=True, text=True, check=False
+            )
+            if result.returncode != 0:
+                return False
+
+            output = result.stdout
+            # 解析 TERMSRV 凭据
+            target_ips = []
+            for line in output.splitlines():
+                line = line.strip()
+                if line.startswith('Target: TERMSRV/'):
+                    ip = line.split('TERMSRV/')[1].strip()
+                    target_ips.append(ip)
+
+            if not target_ips:
+                return True
+
+            # 查询数据库中存在的服务器主机地址
+            import sqlite3
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT host FROM servers')
+            existing_hosts = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            existing_set = set(str(h) for h in existing_hosts)
+
+            # 清除已不存在服务器的凭据
+            cleaned = []
+            for ip in target_ips:
+                if ip not in existing_set:
+                    try:
+                        subprocess.run(
+                            ['cmdkey', '/delete:TERMSRV/' + ip],
+                            capture_output=True, text=True, check=False
+                        )
+                        cleaned.append(ip)
+                    except Exception:
+                        pass
+
+            if cleaned:
+                print(f"[F15] 已清理 {len(cleaned)} 个残留 RDP 凭据: {cleaned}")
+            return True
+        except Exception as e:
+            print(f"[F15] 清理 RDP 凭据失败: {e}")
+            return False
+
     # 运行mstsc
     def run_mstsc(self, ip, port, username, password):
         """使用 Windows 凭据管理器运行远程桌面连接（在线程中执行，避免阻塞界面）"""
         self.thread_it(self._run_mstsc_with_credential, ip, port, username, password)
 
     def _run_mstsc_with_credential(self, ip, port, username, password):
-        """通过 cmdkey 写入凭据管理器 -> mstsc 连接 -> 关闭后清除凭据"""
-        # RDP 凭据目标：TERMSRV/ip（不带端口，凭据按服务器区分）
+        """通过 cmdkey 写入凭据 -> 生成临时 .rdp 文件 -> mstsc 连接 -> 关闭后清理凭据与临时文件
+
+        流程：
+          1. 连接前先清理凭据管理器中与本次主机相关的凭据，避免残留冲突
+          2. 将用户名/密码写入 Windows 凭据管理器（TERMSRV/ip）
+          3. 根据远程桌面高级选项生成临时 .rdp 文件
+          4. 执行 mstsc 打开该 .rdp（阻塞直到远程桌面会话关闭）
+          5. 会话关闭后自动删除凭据并删除临时 .rdp 文件
+        """
+        import sqlite3
+        import tempfile
+
+        # 凭据目标：TERMSRV/ip（不带端口，凭据按服务器区分）
         target = f"TERMSRV/{ip}"
+        tmp_rdp = None
         try:
-            # 添加凭据到 Windows 凭据管理器（列表形式传参，避免密码特殊字符被 shell 解析）
-            result = subprocess.run(
+            # ---- 1. 连接前清理与本次主机相关的凭据（避免密码冲突/残留） ----
+            try:
+                subprocess.run(['cmdkey', '/delete:' + target],
+                               capture_output=True, text=True, check=False)
+            except Exception:
+                pass
+
+            # ---- 2. 读取远程桌面高级选项 ----
+            audio = 'local'
+            clipboard = '1'
+            drive = '0'
+            fullscreen = '0'
+            resolution = '1024x768'
+            if self.db_path:
+                try:
+                    conn = sqlite3.connect(self.db_path)
+                    cur = conn.cursor()
+                    cur.execute('SELECT value FROM settings WHERE key = ?', ('rdp_audio',))
+                    row = cur.fetchone()
+                    if row:
+                        audio = row[0]
+                    cur.execute('SELECT value FROM settings WHERE key = ?', ('rdp_clipboard',))
+                    row = cur.fetchone()
+                    if row:
+                        clipboard = row[0]
+                    cur.execute('SELECT value FROM settings WHERE key = ?', ('rdp_drive',))
+                    row = cur.fetchone()
+                    if row:
+                        drive = row[0]
+                    cur.execute('SELECT value FROM settings WHERE key = ?', ('rdp_fullscreen',))
+                    row = cur.fetchone()
+                    if row:
+                        fullscreen = row[0]
+                    cur.execute('SELECT value FROM settings WHERE key = ?', ('rdp_resolution',))
+                    row = cur.fetchone()
+                    if row:
+                        resolution = row[0]
+                    cur.close()
+                    conn.close()
+                except Exception as e:
+                    print(f"读取远程桌面设置失败，使用默认值: {e}")
+
+            # 解析分辨率（格式 宽度x高度）
+            desktopwidth, desktopheight = 1024, 768
+            if resolution and 'x' in str(resolution):
+                try:
+                    w, h = str(resolution).lower().split('x')
+                    desktopwidth = int(w)
+                    desktopheight = int(h)
+                except Exception:
+                    desktopwidth, desktopheight = 1024, 768
+
+            # 音频位置映射：本地 -> 在本地计算机播放(audiomode 0)；远程 -> 在远程播放(audiomode 1)
+            audiomode = 0 if str(audio).lower() in ('local', '本地') else 1
+            redirect_clipboard = 1 if str(clipboard) == '1' else 0
+            drive_storedirect = '*' if str(drive) == '1' else ''
+            screen_mode = 2 if str(fullscreen) == '1' else 1
+
+            # ---- 3. 生成临时 .rdp 文件 ----
+            rdp_lines = [
+                'full address:s:' + f'{ip}:{port}',
+                'username:s:' + str(username),
+                'prompt for credentials:i:0',
+                'audiomode:i:' + str(audiomode),
+                'redirectclipboard:i:' + str(redirect_clipboard),
+                'drivestoredirect:s:' + drive_storedirect,
+                'screen mode id:i:' + str(screen_mode),
+                'desktopwidth:i:' + str(desktopwidth),
+                'desktopheight:i:' + str(desktopheight),
+                'authentication level:i:2',
+                'allow desktop composition:i:1',
+                'allow font smoothing:i:1',
+            ]
+            fd, tmp_path = tempfile.mkstemp(suffix='.rdp', prefix='mstsc_')
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(rdp_lines) + '\n')
+            tmp_rdp = tmp_path
+
+            # ---- 4. 写入凭据到 Windows 凭据管理器（列表形式传参，避免密码特殊字符被 shell 解析） ----
+            add_result = subprocess.run(
                 ['cmdkey', '/generic:' + target, '/user:' + str(username), '/pass:' + str(password)],
-                capture_output=True, text=True
+                capture_output=True, text=True, check=False
             )
-            if result.returncode != 0:
+            if add_result.returncode != 0:
                 print(f"添加凭据失败，无法连接 {ip}:{port}")
                 return False
 
-            # 启动 mstsc 连接（阻塞直到远程桌面关闭）
-            subprocess.call(['mstsc', '/v', f'{ip}:{port}'])
+            # 启动 mstsc 打开临时 .rdp（阻塞直到远程桌面会话关闭）
+            subprocess.call(['mstsc', tmp_rdp])
             return True
         except Exception as e:
             print(f"运行mstsc时出错: {e}")
             return False
         finally:
-            # 连接结束（或异常）后，清除刚刚添加的凭据
+            # ---- 5. 会话关闭（或异常）后，清理凭据与临时文件 ----
             try:
-                subprocess.run(['cmdkey', '/delete:' + target], capture_output=True, text=True)
+                subprocess.run(['cmdkey', '/delete:' + target],
+                               capture_output=True, text=True, check=False)
             except Exception:
                 pass
+            if tmp_rdp and os.path.exists(tmp_rdp):
+                try:
+                    os.remove(tmp_rdp)
+                except Exception:
+                    pass
     '''
     def run_mstsc(self,ip,port,username,password):
         import subprocess
