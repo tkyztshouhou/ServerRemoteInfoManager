@@ -25,9 +25,9 @@ class infoServer:
             with open(version_path, 'r') as f:
                 version = f.read().strip()
         except Exception:
-            version = 'V1.0.20250124'
+            version = 'V2.1.20260825'
         self.master.title(f"主机运维管理工具    {version} -LiuShan")
-        self.master.geometry('1280x720+50+0')   #将该行代码修改为分辨率可自定义调整窗口大小
+        self.master.geometry('1366x768+50+0')   #将该行代码修改为分辨率可自定义调整窗口大小
         self.master.resizable(width=True, height=True)
         # B18: 使用绝对路径加载图标，避免工作目录不在项目根目录时找不到图片
         self._img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'img')
@@ -150,6 +150,10 @@ class infoServer:
         style.configure('Treeview', rowheight=25)
         style.map('Treeview', background=[('selected', 'gray')], foreground=[('selected', 'white')])
         style.configure('Treeview.Heading', font=('Microsoft YaHei',10))
+        
+        # 配置自定义滚动条样式
+        style.configure('Custom.Vertical.TScrollbar', troughcolor='#F0F0F0', arrowcolor='#333333')
+        style.configure('Custom.Horizontal.TScrollbar', troughcolor='#F0F0F0', arrowcolor='#333333')
 
         # 创建主机列表
         self.server_tree = ttk.Treeview(self.right_frame_top,
@@ -189,6 +193,12 @@ class infoServer:
         self.search_entry.pack(side=tk.LEFT,padx=1)
         self.search_btn = tk.Button(self.top_R, text="搜索", width=10,command=self.search_servers)
         self.search_btn.pack(side=tk.LEFT,padx=1)
+        
+        # 从settings表中读取存储的颜色值
+        search_bg_color = self.db.get_setting('ui_search_bg_color', '#FFFFFF')
+        font_color = self.db.get_setting('ui_font_color', '#333333')
+        self.log.write_log_info(f'组件创建时设置搜索框颜色 - 背景色: {search_bg_color}, 字体色: {font_color}')
+        self.search_entry.configure(bg=search_bg_color, fg=font_color)
 
         # 创建右侧服务器详细信息框架
         self.lable1 = tk.Label(self.right_frame_bottom, text="服务器说明：",bg='#F0F0F0',font=('微软雅黑',10))
@@ -203,6 +213,12 @@ class infoServer:
         info_Scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.server_info.configure(yscrollcommand=info_Scrollbar.set)
         
+        # 从settings表中读取存储的颜色值
+        info_bg_color = self.db.get_setting('ui_info_bg_color', '#FFFFFF')
+        font_color = self.db.get_setting('ui_font_color', '#333333')
+        self.log.write_log_info(f'组件创建时设置Text组件颜色 - 背景色: {info_bg_color}, 字体色: {font_color}')
+        self.server_info.configure(bg=info_bg_color, fg=font_color)
+        
         #绑定窗口改变事件
         self.master.bind('<Configure>', update_width)
 
@@ -214,9 +230,11 @@ class infoServer:
         self.server_tree.bind("<<TreeviewSelect>>", self.on_selection_change)
         self.group_tree.bind("<<TreeviewSelect>>", self.on_group_selection_change)
 
-        # 绑定中键事件 取消焦点
+        # 绑定中键事件（按下+释放） 取消焦点
         self.group_tree.bind("<Button-2>", self.groupTree_release)
+        self.group_tree.bind("<ButtonRelease-2>", self.groupTree_release)
         self.server_tree.bind("<Button-2>", self.Stree_release)
+        self.server_tree.bind("<ButtonRelease-2>", self.Stree_release)
 
         # 右键事件
         self.group_tree.bind("<Button-3>", self.tree_right_click)
@@ -236,43 +254,60 @@ class infoServer:
     def init_groups_data(self):
         try:
             # 任务1: 使用FontAwesome图标替代旧的文件夹图标
-            self.db.init_groups_data(self.group_tree, self._fa_icons.get('folder_close'), self._fa_icons.get('folder_open'))
+            # 所有节点都使用folder_badge_plus.png图标
+            self.db.init_groups_data(self.group_tree, self._fa_icons.get('folder_close'), self._fa_icons.get('folder_close'))
             self.restore_group_state()
             self.log.write_log_info('组数据初始化成功')
         except Exception as e:
             self.log.write_log_error('外层调用组数据初始化失败' + str(e))
 
     def _save_group_state(self, event=None):
-        """保存分组展开/折叠状态"""
+        """保存分组展开/折叠状态（递归保存所有层级节点）"""
         try:
             import json
             state = {}
-            for item in self.group_tree.get_children():
-                state[item] = self.group_tree.item(item)['open']
-                self._save_child_state(item, state)
-            self.db.set_setting('group_expand_state', json.dumps(state))
-        except Exception:
-            pass
+            # 构建 item_id -> group_id 的反向映射
+            item_to_group = {iid: gid for gid, iid in self.db.item_map.items()}
 
-    def _save_child_state(self, parent_id, state):
-        """递归保存子节点展开状态"""
-        for child in self.group_tree.get_children(parent_id):
-            state[child] = self.group_tree.item(child)['open']
-            self._save_child_state(child, state)
+            def save_item(item_id):
+                gid = item_to_group.get(item_id)
+                if gid is not None:
+                    # 统一用字符串键，避免JSON序列化/反序列化的int/str类型不一致问题
+                    state[str(gid)] = self.group_tree.item(item_id)['open']
+                # 递归保存所有子节点
+                for child in self.group_tree.get_children(item_id):
+                    save_item(child)
+
+            for root in self.group_tree.get_children():
+                save_item(root)
+
+            self.db.set_setting('group_expand_state', json.dumps(state))
+        except Exception as e:
+            self.log.write_log_error('保存分组展开状态失败: ' + str(e))
 
     def restore_group_state(self):
-        """恢复分组展开/折叠状态"""
+        """恢复分组展开/折叠状态（递归恢复所有层级节点）"""
         try:
             import json
             raw = self.db.get_setting('group_expand_state')
             if not raw:
                 return
-            state = json.loads(raw)
-            for item_id, is_open in state.items():
-                if self.group_tree.exists(item_id):
-                    self.group_tree.item(item_id, open=is_open)
-        except Exception:
-            pass
+            state = json.loads(raw)  # 键为字符串形式的group_id
+            # 构建 item_id -> group_id 的反向映射
+            item_to_group = {iid: gid for gid, iid in self.db.item_map.items()}
+
+            def restore_item(item_id):
+                gid = item_to_group.get(item_id)
+                if gid is not None and str(gid) in state:
+                    self.group_tree.item(item_id, open=state[str(gid)])
+                # 递归恢复所有子节点
+                for child in self.group_tree.get_children(item_id):
+                    restore_item(child)
+
+            for root in self.group_tree.get_children():
+                restore_item(root)
+        except Exception as e:
+            self.log.write_log_error('恢复分组展开状态失败: ' + str(e))
 
     # 初始化主机数据
     def init_server_data(self):
@@ -314,16 +349,20 @@ class infoServer:
             self._fa_icons['default'] = self._fa_icons.get('RDP')
 
             # 任务1: 初始化分组树展开/折叠图标
-            # 折叠状态：fa-folder (uf00b) - 棕色
-            img_folder_close = Image.new('RGBA', (20, 20), (0, 0, 0, 0))
-            draw_folder_close = ImageDraw.Draw(img_folder_close)
-            draw_folder_close.text((0, 0), '\uf00b', font=self._fa_font, fill='#8B4513')
+            # 折叠状态：使用 folder_badge_plus.png
+            img_path = os.path.join(os.path.dirname(__file__), '..', 'img', 'folder_badge_plus.png')
+            img_path = os.path.normpath(img_path)
+            self.log.write_log_info(f'加载关闭状态图标: {img_path}')
+            img_folder_close = Image.open(img_path)
+            img_folder_close = img_folder_close.resize((24, 24), Image.Resampling.LANCZOS)
             self._fa_icons['folder_close'] = ImageTk.PhotoImage(img_folder_close)
 
-            # 展开状态：fa-folder-open (uf00c) - 棕色
-            img_folder_open = Image.new('RGBA', (20, 20), (0, 0, 0, 0))
-            draw_folder_open = ImageDraw.Draw(img_folder_open)
-            draw_folder_open.text((0, 0), '\uf00c', font=self._fa_font, fill='#D2691E')
+            # 展开状态：使用 folder.png
+            img_path = os.path.join(os.path.dirname(__file__), '..', 'img', 'folder.png')
+            img_path = os.path.normpath(img_path)
+            self.log.write_log_info(f'加载打开状态图标: {img_path}')
+            img_folder_open = Image.open(img_path)
+            img_folder_open = img_folder_open.resize((24, 24), Image.Resampling.LANCZOS)
             self._fa_icons['folder_open'] = ImageTk.PhotoImage(img_folder_open)
 
             self.log.write_log_info('Font Awesome 图标初始化成功')
@@ -337,9 +376,17 @@ class infoServer:
     # 加载设置并应用界面样式
     def load_settings(self):
         try:
+            self.log.write_log_info('开始加载设置...')
             font_name = self.db.get_setting('ui_font', 'Microsoft YaHei')
             font_size = int(self.db.get_setting('ui_font_size', '10'))
             bg_color = self.db.get_setting('ui_bg_color', '#F0F0F0')
+            font_color = self.db.get_setting('ui_font_color', '#333333')
+            info_bg_color = self.db.get_setting('ui_info_bg_color')
+            search_bg_color = self.db.get_setting('ui_search_bg_color')
+            
+            self.log.write_log_info(f'加载的颜色设置 - 字体: {font_name}, 大小: {font_size}, 背景色: {bg_color}, 字体色: {font_color}')
+            self.log.write_log_info(f'服务器说明背景色: {info_bg_color}, 搜索框背景色: {search_bg_color}')
+            
             self.master.configure(bg=bg_color)
             self.top.configure(bg=bg_color)
             self.left_frame.configure(bg=bg_color)
@@ -350,9 +397,7 @@ class infoServer:
             self.top_R.configure(bg=bg_color)
             self.lable1.configure(bg=bg_color, font=(font_name, font_size))
             self.search_label.configure(bg=bg_color, font=(font_name, font_size))
-            font_color = self.db.get_setting('ui_font_color', '#333333')
-            info_bg_color = self.db.get_setting('ui_info_bg_color')
-            search_bg_color = self.db.get_setting('ui_search_bg_color')
+            
             self.apply_settings(font_name, font_size, bg_color,
                                 font_color=font_color, info_bg_color=info_bg_color,
                                 search_bg_color=search_bg_color)
@@ -364,13 +409,25 @@ class infoServer:
                        font_color='#333333', info_bg_color=None, search_bg_color=None):
         """将字体和背景颜色应用到分组树和服务器树"""
         try:
+            self.log.write_log_info(f'apply_settings被调用 - 字体: {font_name}, 大小: {font_size}, 背景色: {bg_color}')
+            self.log.write_log_info(f'应用的颜色设置 - 字体色: {font_color}, 服务器说明背景色: {info_bg_color}, 搜索框背景色: {search_bg_color}')
+            
+            # 如果没有指定服务器说明背景色，使用白色作为默认值
+            if info_bg_color is None:
+                info_bg_color = '#FFFFFF'
+            # 如果没有指定搜索框背景色，使用白色作为默认值
+            if search_bg_color is None:
+                search_bg_color = '#FFFFFF'
+                
+            self.log.write_log_info(f'使用默认颜色 - 服务器说明背景色: {info_bg_color}, 搜索框背景色: {search_bg_color}')
+            
             # 更新主窗口背景
             self.master.configure(bg=bg_color)
             for child in self.master.winfo_children():
                 if isinstance(child, tk.Frame):
                     child.configure(bg=bg_color)
 
-            # 更新 Treeview 样式
+            # 更新 Treeview 样式（ttk.Treeview 的字体只能通过 Style 设置，不支持 -font 选项）
             style = ttk.Style()
             style.configure('Treeview', font=(font_name, int(font_size)),
                             background=bg_color, foreground=font_color,
@@ -378,29 +435,121 @@ class infoServer:
             style.configure('Treeview.Heading', font=(font_name, int(font_size), 'bold'),
                             background=bg_color, foreground=font_color)
 
-            # 更新分组树和服务器树
-            self.group_tree.configure(font=(font_name, int(font_size)))
-            self.server_tree.configure(font=(font_name, int(font_size)))
-
             # 应用服务器说明区背景色
             if info_bg_color is not None:
-                self.right_frame_bottom.configure(bg=info_bg_color)
-                self.lable1.configure(bg=info_bg_color)
+                self.log.write_log_info(f'应用服务器说明区背景色: {info_bg_color}')
+                # self.right_frame_bottom.configure(bg=info_bg_color)
+                # self.lable1.configure(bg=info_bg_color, fg=font_color)
+                # Text组件需要特殊处理
                 self.server_info.configure(bg=info_bg_color, fg=font_color)
+                self.server_info.config(bg=info_bg_color, fg=font_color)
+                # 强制刷新Text组件
+                self.server_info.update_idletasks()
+                self.log.write_log_info(f'Text组件背景色已设置为: {info_bg_color}')
+                # 更新滚动条样式
+                for widget in self.right_frame_bottom.winfo_children():
+                    if isinstance(widget, ttk.Scrollbar):
+                        widget.configure(style='Custom.Vertical.TScrollbar')
+                        # 动态更新滚动条颜色
+                        style = ttk.Style()
+                        style.configure('Custom.Vertical.TScrollbar', troughcolor=info_bg_color, arrowcolor=font_color)
 
             # 应用搜索框背景色
             if search_bg_color is not None:
-                # 强制设置背景色和前景色
+                self.log.write_log_info(f'应用搜索框背景色: {search_bg_color}')
+                # 更新搜索框容器背景色
+                # self.top_R.configure(bg=search_bg_color)
+                # Entry组件需要特殊处理
                 self.search_entry.config(bg=search_bg_color, fg=font_color)
                 self.search_entry.configure(bg=search_bg_color, fg=font_color)
-                # 尝试强制刷新
-                self.search_entry.update()
-                # 同时更新搜索标签颜色
-                self.search_label.configure(bg=search_bg_color, fg=font_color)
+                # 更新搜索标签颜色
+                # self.search_label.configure(bg=search_bg_color, fg=font_color)
+                # 强制刷新搜索框
+                self.search_entry.update_idletasks()
+                # self.search_label.update_idletasks()
+                self.log.write_log_info(f'Entry组件背景色已设置为: {search_bg_color}')
+                # 强制刷新整个界面
+                self.top_R.update_idletasks()
 
             self.log.write_log_info('界面样式已更新')
+            
+            # 强制刷新Text和Entry组件
+            self.refresh_text_component()
+            self.refresh_entry_component()
+            
+            # 强制刷新整个界面
+            self.master.update_idletasks()
+            self.master.after(100, lambda: self.master.update_idletasks())
+            
         except Exception as e:
             self.log.write_log_error('应用设置失败: ' + str(e))
+    
+    def force_refresh_ui(self):
+        """强制刷新整个界面"""
+        try:
+            # 更新所有组件
+            self.master.update_idletasks()
+            
+            # 重新加载并应用所有设置
+            font_name = self.db.get_setting('ui_font', 'Microsoft YaHei')
+            font_size = self.db.get_setting('ui_font_size', '10')
+            bg_color = self.db.get_setting('ui_bg_color', '#F0F0F0')
+            font_color = self.db.get_setting('ui_font_color', '#333333')
+            info_bg_color = self.db.get_setting('ui_info_bg_color', '#F0F0F0')
+            search_bg_color = self.db.get_setting('ui_search_bg_color', '#F0F0F0')
+            
+            # 应用所有设置
+            self.apply_settings(font_name, font_size, bg_color,
+                              font_color=font_color, info_bg_color=info_bg_color,
+                              search_bg_color=search_bg_color)
+            
+            # 强制刷新Text和Entry组件
+            self.refresh_text_component()
+            self.refresh_entry_component()
+            
+            self.log.write_log_info('界面已强制刷新')
+        except Exception as e:
+            self.log.write_log_error('强制刷新界面失败: ' + str(e))
+    
+    def refresh_text_component(self):
+        """强制刷新Text组件"""
+        try:
+            info_bg_color = self.db.get_setting('ui_info_bg_color', '#F0F0F0')
+            font_color = self.db.get_setting('ui_font_color', '#333333')
+            
+            self.log.write_log_info(f'刷新Text组件 - 背景色: {info_bg_color}, 字体色: {font_color}')
+            
+            # 强制设置Text组件颜色
+            self.server_info.configure(bg=info_bg_color, fg=font_color)
+            self.server_info.config(bg=info_bg_color, fg=font_color)
+            
+            # 强制刷新Text组件
+            self.server_info.update_idletasks()
+            self.server_info.update()
+            
+            self.log.write_log_info('Text组件刷新成功')
+        except Exception as e:
+            self.log.write_log_error('刷新Text组件失败: ' + str(e))
+    
+    def refresh_entry_component(self):
+        """强制刷新Entry组件"""
+        try:
+            search_bg_color = self.db.get_setting('ui_search_bg_color', '#F0F0F0')
+            font_color = self.db.get_setting('ui_font_color', '#333333')
+            
+            self.log.write_log_info(f'刷新Entry组件 - 背景色: {search_bg_color}, 字体色: {font_color}')
+            
+            # 强制设置Entry组件颜色
+            self.search_entry.config(bg=search_bg_color, fg=font_color)
+            self.search_entry.configure(bg=search_bg_color, fg=font_color)
+            
+            # 强制刷新Entry组件
+            self.search_entry.update_idletasks()
+            self.search_entry.update()
+            
+            self.log.write_log_info('Entry组件刷新成功')
+        except Exception as e:
+            self.log.write_log_error('刷新Entry组件失败: ' + str(e))
 
     def apply_all_settings(self, ssh_tool_type, ssh_paths, vnc_path, default_user, default_pass,
                            ssh_port, vnc_port, font_name, font_size, bg_color,
@@ -425,6 +574,10 @@ class infoServer:
         self.apply_settings(font_name, font_size, bg_color,
                             font_color=font_color, info_bg_color=info_bg_color,
                             search_bg_color=search_bg_color)
+        
+        # 确保界面完全刷新
+        self.force_refresh_ui()
+        
         self.log.write_log_info('设置已保存并立即生效')
 
     # 打开设置对话框
@@ -520,8 +673,12 @@ class infoServer:
 
             # 立即应用到主窗口
             self.apply_settings('Microsoft YaHei', 10, '#F0F0F0',
-                                font_color='#333333', info_bg_color='#F0F0F0',
+                                font_color='#333333', info_bg_color='#FFFFFF',
                                 search_bg_color='#FFFFFF')
+            
+            # 强制刷新界面
+            self.force_refresh_ui()
+            
             messagebox.showinfo('提示', '已恢复为默认设置')
             self.log.write_log_info('已恢复默认设置')
 
@@ -801,146 +958,128 @@ class infoServer:
         
     # 编辑服务器
     def edit_server(self):
+        self.log.write_log_info('事件触发：编辑主机信息')
+        # 1. 先从servertree获取当前选中的item的server信息
+        selected_item = self.server_tree.focus()
+        if not selected_item:
+            messagebox.showerror('提示', '请先选中要修改的主机')
+            return
+        
+        item_values = self.server_tree.item(selected_item).get('values')
+        if not item_values or len(item_values) < 6:
+            messagebox.showerror("提示", "服务器信息不完整")
+            return
+        
+        # 树中数据显示格式：[连接类型, 主机名, 主机地址, 端口号, 用户名, 密码]
+        # 注意：Treeview会把纯数字值自动转成int，必须统一转换为str
+        current_name = str(item_values[1])      # 主机名（显示名称）
+        current_host = str(item_values[2])      # 主机地址（用于数据库定位）
+        current_port = str(item_values[3])      # 端口号
+        current_username = str(item_values[4])  # 用户名
+        
+        # 从数据库获取密码（按host查询确保唯一性；数据库无记录时回退到树中值）
+        current_password = self.db.get_server_password_by_host(current_host)
+        if current_password is None:
+            current_password = str(item_values[5]) if len(item_values) > 5 else ''
+        if current_password is None:
+            current_password = ''
+        
+        # 安全修复：密码脱敏处理
+        masked_password = current_password[:2] + '*' * (len(current_password) - 2) if len(current_password) > 2 else '*' * len(current_password)
+        self.log.write_log_info('主机名：' + current_name + ',主机ip : ' + current_host + '端口号：' + str(current_port) + '用户名：' + current_username + '密码：' + masked_password)
+        
         def edit_da():
+            # 2. 根据编辑主机的下拉框判断要修改的字段
             select_collu = down.get()
-            name = server_info[0]
-            host = server_info[1]
-           
-            server_id = self.db.get_server_id(name)
-            selectItem_groupTree = self.group_tree.focus()                              # 获取选中的分组id
-            selectTree_name = self.group_tree.item(selectItem_groupTree)['text']         # 获取选中的分组名称
-            select_group_id = self.db.get_group_focus_id(selectTree_name)
-
-            # if not name:
-            #     messagebox.showinfo('提示', '主机名不能为空')
-            #     self.log.write_log_error('主机名不能为空，添加失败')
-            #     return
-            # if not host:
-            #     messagebox.showinfo('提示', '主机地址不能为空')
-            #     self.log.write_log_error('主机地址不能为空，添加失败')
-            #     return
+            host = current_host
 
             try:
-                if select_collu == '主机名':
-                    if self.db.exists(new_value,'servers'):
-                        messagebox.showinfo('提示', '主机名已存在')
-                        self.log.write_log_error('主机名已存在，添加失败')
+                # 分组编辑：需要从分组树获取当前选中的分组
+                select_group_id = None
+                if select_collu == '分组':
+                    selectItem_groupTree = self.group_tree.focus()
+                    if not selectItem_groupTree:
+                        messagebox.showinfo('提示', '请先在左侧分组树中选择分组')
                         return
-                    if1 = 'name'
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server(if1,new_value,host)
-                    # 刷新server_tree数据
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,主机名修改为:' + new_value)
-                    self.top.destroy()
-                    return
-                elif select_collu == '主机地址':
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server('host', new_value, host)
-                    # 刷新server_tree数据（host已变，重新加载）
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    # 更新host变量，供后续日志使用
-                    host = new_value
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,主机地址修改为:' + host)
-                    self.top.destroy()
-                    return
-                elif select_collu == '端口号':
-                    if2 = 'port'
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server(if2,new_value,host)
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,端口号修改为:' + new_value)
-                    self.top.destroy()
-                    return
-                elif select_collu == '用户名':
-                    if3 = 'username'
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server(if3,new_value,host)
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,用户名修改为:' + new_value)
-                    self.top.destroy()
-                    return
-                elif select_collu == '密码':
-                    if4 = 'password'
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server(if4,new_value,host)
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    # 安全修复：密码脱敏处理
-                    masked_new_value = new_value[:2] + '*' * (len(new_value) - 2) if len(new_value) > 2 else '*' * len(new_value)
-                    self.log.write_log_info('主机:' + host + '编辑成功,密码修改为:' + masked_new_value)
-                    self.top.destroy()
-                    return
-                elif select_collu == '分组':
+                    selectTree_name = self.group_tree.item(selectItem_groupTree)['text']
+                    select_group_id = self.db.get_group_focus_id(selectTree_name)
                     if select_group_id is None:
                         messagebox.showinfo('提示', '未选择分组,请选择分组')
                         self.log.write_log_error('未选择分组，编辑主机信息失败')
                         return
-                    conten_entry.delete("1.0", tk.END)
-                    conten_entry.insert(tk.END, "修改分组无需输入内容")
-                    if5 = 'parent_id'
-                    self.db.update_server(if5, int(select_group_id), host)
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,分组修改为:' + str(select_group_id))
-                    self.top.destroy()
-                    return
-                elif select_collu == '服务器说明':
-                    if6 = 'server_info'
-                    new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
-                    self.db.update_server(if6,new_value,host)
-                    self.server_tree.delete(*self.server_tree.get_children())
-                    self.init_server_data()
-                    messagebox.showinfo('提示', '编辑成功')
-                    self.log.write_log_info('主机:' + host + '编辑成功,服务器说明修改为:' + new_value)
-                    self.top.destroy()
-                    return
+
+                # 读取用户输入的新值
+                new_value = conten_entry.get("1.0", tk.END).rstrip("\n")
+
+                # 字段映射：下拉框选项 -> 数据库字段名
+                field_map = {
+                    '主机名': 'name',
+                    '主机地址': 'host',
+                    '端口号': 'port',
+                    '用户名': 'username',
+                    '密码': 'password',
+                    '服务器说明': 'server_info',
+                }
+
+                if select_collu == '分组':
+                    field = 'parent_id'
+                    value = int(select_group_id)
+                    display_value = str(select_group_id)
+                elif select_collu in field_map:
+                    field = field_map[select_collu]
+                    value = new_value
+                    display_value = new_value
+                    # 主机名：非空 + 查重
+                    if select_collu == '主机名':
+                        if not value:
+                            messagebox.showinfo('提示', '主机名不能为空')
+                            self.log.write_log_error('主机名不能为空，编辑失败')
+                            return
+                        if value != current_name and self.db.exists(value, 'servers'):
+                            messagebox.showinfo('提示', '主机名已存在')
+                            self.log.write_log_error('主机名已存在，编辑失败')
+                            return
+                    # 主机地址：非空 + 查重
+                    elif select_collu == '主机地址':
+                        if not value:
+                            messagebox.showinfo('提示', '主机地址不能为空')
+                            self.log.write_log_error('主机地址不能为空，编辑失败')
+                            return
+                        if value != current_host and self.db.ip_exists(value):
+                            messagebox.showinfo('提示', '主机地址已存在')
+                            self.log.write_log_error('主机地址已存在，编辑失败')
+                            return
+                    # 端口号：必须是数字
+                    elif select_collu == '端口号':
+                        if not value.isdigit():
+                            messagebox.showinfo('提示', '端口号必须是数字')
+                            self.log.write_log_error('端口号必须是数字，编辑失败')
+                            return
                 else:
                     messagebox.showinfo('提示', '不支持的操作')
-                    self.log.write_log_error('编辑失败')
+                    self.log.write_log_error('编辑失败：不支持的操作')
+                    return
+
+                # 3. 更新sqlite
+                self.db.update_server(field, value, host)
+
+                # 4. 刷新servertree界面（从数据库重新加载，立即反映修改）
+                self.server_tree.delete(*self.server_tree.get_children())
+                self.init_server_data()
+
+                messagebox.showinfo('提示', '编辑成功')
+                # 日志记录（密码脱敏）
+                if select_collu == '密码':
+                    masked_new = value[:2] + '*' * (len(value) - 2) if len(value) > 2 else '*' * len(value)
+                    self.log.write_log_info('主机:' + host + '编辑成功,密码修改为:' + masked_new)
+                else:
+                    self.log.write_log_info('主机:' + host + '编辑成功,' + select_collu + '修改为:' + display_value)
+                self.top.destroy()
             except Exception as e:
+                messagebox.showerror('错误', '编辑失败：' + str(e))
                 self.log.write_log_error('服务器编辑失败' + str(e))
             
-        self.log.write_log_info('事件触发：编辑主机信息')
-        selected_item = self.server_tree.focus()
-        if not selected_item:
-            messagebox.showerror("Error", "请选择一个服务器")
-            return
-        
-        item_values = self.server_tree.item(selected_item).get('values')
-        if not item_values or len(item_values) < 2:
-            messagebox.showerror("Error", "服务器信息不完整")
-            return
-
-        selectServerTreeName = self.server_tree.item(selected_item)['values'][1]
-
-        if not isinstance(selectServerTreeName, str):
-            raise ValueError("selectServerTreeName 必须是字符串类型")
-
-        server_info = self.db.get_server_by_name(selectServerTreeName)
-        if server_info is None:
-            # 处理未找到的情况，例如显示错误消息
-            messagebox.showerror("Error", f"服务器{selected_item} {selectServerTreeName} {server_info} 未找到")
-            return
-        
-        name = server_info[0]
-        host = server_info[1]
-        port = server_info[2]
-        username = server_info[3]
-        password = server_info[4]
-        # 安全修复：密码脱敏处理，避免日志泄露
-        masked_password = password[:2] + '*' * (len(password) - 2) if len(password) > 2 else '*' * len(password)
-        self.log.write_log_info('主机名：' + name + ',主机ip : ' + host + '端口号：' + str(port) + '用户名：' + username + '密码：' + masked_password)
+        # 创建编辑主机窗口
         self.top = tk.Toplevel()
         self.top.title("编辑主机")
         self.top_master(self.top,300)
@@ -1131,17 +1270,27 @@ class infoServer:
         self.server_menu.post(event.x_root, event.y_root)   # 在鼠标位置显示菜单
     # group_tree 释放焦点事件
     def groupTree_release(self,event):
-        # B28: 移除调试输出
-        # 取消选中
-        self.group_tree.selection_remove(self.group_tree.focus())
+        # 延迟执行清除操作，确保覆盖Treeview内部的选中处理
+        self.group_tree.after(50, self._clear_group_tree_selection)
+
+    def _clear_group_tree_selection(self):
+        # 获取当前所有选中的项并全部取消选中
+        selection = self.group_tree.selection()
+        if selection:
+            self.group_tree.selection_remove(*selection)
         # group_tree焦点设为空
         self.group_tree.focus("")
 
     # server_tree 释放焦点事件
     def Stree_release(self,event):
-        # B28: 移除调试输出
-        # 取消选中
-        self.server_tree.selection_remove(self.server_tree.focus())
+        # 延迟执行清除操作，确保覆盖Treeview内部的选中处理
+        self.server_tree.after(50, self._clear_server_tree_selection)
+
+    def _clear_server_tree_selection(self):
+        # 获取当前所有选中的项并全部取消选中
+        selection = self.server_tree.selection()
+        if selection:
+            self.server_tree.selection_remove(*selection)
         # server_tree焦点设为空
         self.server_tree.focus("")
 
@@ -1310,7 +1459,16 @@ class infoServer:
             port = str(self.server_tree.item(selected_item)['values'][3])
             username = self.server_tree.item(selected_item)['values'][4]
             password = self.server_tree.item(selected_item)['values'][5]
+            
+            # 添加连接确认弹框
+            confirm_msg = f"确认连接到主机：\n\n主机名：{name}\n地址：{host}:{port}\n类型：RDP\n用户名：{username}"
+            result = messagebox.askyesno('确认连接', confirm_msg)
+            if not result:
+                self.log.write_log_info('用户取消RDP连接')
+                return
+            
             self.too.run_mstsc(host, port, username, password)
+            self.log.write_log_info('RDP连接: ' + host + ' 端口:' + port + ' 用户:' + username)
         elif connect_type == 'SSH':
             name = self.server_tree.item(selected_item)['values'][1]
             host = self.server_tree.item(selected_item)['values'][2]
@@ -1355,9 +1513,18 @@ class infoServer:
             self.too.run_radmin(host, port, callback=self.show_connection_error)
             self.log.write_log_info('Radmin连接: ' + host + ' 端口:' + port)
         elif connect_type == 'URL':
+            name = self.server_tree.item(selected_item)['values'][1]
             host = self.server_tree.item(selected_item)['values'][2]
-            # username = self.server_tree.item(selected_item)['values'][4]
-            self.too.thread_it(self.too.open_browser,host)
+            
+            # 添加连接确认弹框
+            confirm_msg = f"确认打开URL：\n\n主机名：{name}\n地址：{host}\n类型：URL"
+            result = messagebox.askyesno('确认连接', confirm_msg)
+            if not result:
+                self.log.write_log_info('用户取消URL连接')
+                return
+            
+            self.too.thread_it(self.too.open_browser, host)
+            self.log.write_log_info('URL连接: ' + host)
         else:
             messagebox.showerror('错误', '不支持的连接类型，请联系系统管理员！')
 
@@ -1404,12 +1571,12 @@ class infoServer:
             item = self.group_tree.item(selected_item)
             group_name = item['text']
             group_id = self.db.get_group_id(group_name)
-            if self.db.check_group_has_servers(group_id):
-                self.server_tree.delete(*self.server_tree.get_children())
-                res = self.db.get_servers_by_group_id(group_id)
-                for r in res:
-                    icon = self._get_server_icons(r[1])
-                    self.server_tree.insert('', 'end', image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], r[6], ''))
+            # 无论分组下是否有主机，都先清空服务器树（无主机时显示空表格）
+            self.server_tree.delete(*self.server_tree.get_children())
+            res = self.db.get_servers_by_group_id(group_id)
+            for r in res:
+                icon = self._get_server_icons(r[1])
+                self.server_tree.insert('', 'end', image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], r[6], ''))
 
 
     # self.top的位置 添加主机用

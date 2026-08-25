@@ -106,7 +106,7 @@ class DataAccess:
 
         for child in children:
             child_group_id, name, _ = child[:3]
-            # 子节点默认折叠，使用关闭文件夹图标
+            # 子节点默认折叠，使用folder_badge_plus.png图标
             item_id = tree.insert(self.item_map[parent_group_id], 'end', text=name, image=folder_closed, open=False)
             self.item_map[child_group_id] = item_id
             # 递归处理子节点的子节点
@@ -127,7 +127,8 @@ class DataAccess:
             for result in results:
                 group_id, name, parent_id = result[:3]
                 if parent_id is None:
-                    item_id = tree.insert('', 'end', text=name, image=folder_open, open=True)
+                    # 根节点默认展开，使用folder_badge_plus.png图标
+                    item_id = tree.insert('', 'end', text=name, image=folder_closed, open=True)
                     self.item_map[group_id] = item_id
                     top_level_items.append(group_id)
             # 递归插入子节点
@@ -327,6 +328,15 @@ class DataAccess:
         conn = sqlite3.connect(self.db)
         cursor = conn.cursor()
         cursor.execute('SELECT password FROM servers WHERE name =?', (name,))
+        result = cursor.fetchone()
+        cursor.close()
+        return result[0] if result else None
+
+    # 根据host返回主机password
+    def get_server_password_by_host(self, host):
+        conn = sqlite3.connect(self.db)
+        cursor = conn.cursor()
+        cursor.execute('SELECT password FROM servers WHERE host =?', (host,))
         result = cursor.fetchone()
         cursor.close()
         return result[0] if result else None

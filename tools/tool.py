@@ -74,65 +74,35 @@ class too:
 
     # 运行mstsc
     def run_mstsc(self, ip, port, username, password):
-            # 获取当前项目目录
-            current_dir = os.getcwd()
-            
-            # 生成临时的 RDP 文件路径
-            rdp_file_path = os.path.join(current_dir, 'temp.rdp')
-            
-            # 写入RDP文件内容
-            rdp_content = (
-                f"full address:s:{ip}:{port}\n"  # IP地址和端口号
-                f"username:s:{username}\n"      # 用户名
-                f"password 51:s:{password}\n"   # 密码
-                "prompt for credentials:i:0\n"  # 表示不提示输入凭据，直接使用 RDP 文件中的凭据
-                "enablecredsspsupport:i:1\n"  # 启用凭据安全支持提供程序
-                "screen mode id:i:2\n"  # 全屏
-                "color depth:i:32\n"  # 颜色最高质量32位
-                "use multimon:i:0\n"  # 不要将所有监视器用于远程会话
-                "audio mode:i:2\n"      # 本地资源配置远程音频在远程计算机上播放
-                "keyboard hook:i:2\n"  # 仅在全屏显示时应用windows组合键
-                "redirectclipboard:i:1\n"  # 本地设备资源仅使用剪贴板
-                "prompt credential once:i:1\n"  # 仅提示一次
-                "authentication level:i:2\n"  # 高级服务器身份验证设置连接并不显示警告
-                "disable wallpaper:i:1\n"   # 禁用桌面壁纸
-                "disable full window drag:i:1\n"    
-                "disable menu anims:i:1\n"  
-                "disable themes:i:1\n"      
-                "disable cursor setting:i:1\n"  
-                # "bitmapcachepersistenable:i:1\n"    
-                # "redirectprinters:i:1\n"    
-                "redirectcomports:i:0\n"          # 重定向打印机
-                "redirectsmartcards:i:1\n"      #   重定向智能卡
-                "redirectserialports:i:0\n"      # 重定向串行端口
-                "redirectparallelports:i:0\n"   # 重定向并行端口
-                "redirectdevices:i:1\n"          # 重定向设备
-                "redirectposdevices:i:0\n"       # 重定向POS设备
-                "redirectdirectx:i:1\n"          # 重定向DirectX
-                "redirectdirectxdesktop:i:1\n"      # 重定向DirectX桌面
-                "redirectdirectxdesktopmode:i:1\n"  # 重定向DirectX桌面模式
-                "redirectdirectxmode:i:1\n"          # 重定向DirectX模式
-            )
-            
-            # 写入 RDP 文件
-            with open(rdp_file_path, 'w', encoding='utf-8') as f:
-                f.write(rdp_content)
-            
-            # 调试信息：打印RDP文件内容
-            print(f"RDP文件内容:\n{rdp_content}")
+        """使用 Windows 凭据管理器运行远程桌面连接（在线程中执行，避免阻塞界面）"""
+        self.thread_it(self._run_mstsc_with_credential, ip, port, username, password)
 
-            # 调用mstsc命令
-            self.thread_it(self._run_mstsc, rdp_file_path)
-    def _run_mstsc(self, rdp_file_path):
+    def _run_mstsc_with_credential(self, ip, port, username, password):
+        """通过 cmdkey 写入凭据管理器 -> mstsc 连接 -> 关闭后清除凭据"""
+        # RDP 凭据目标：TERMSRV/ip（不带端口，凭据按服务器区分）
+        target = f"TERMSRV/{ip}"
         try:
-            subprocess.call(['mstsc', rdp_file_path])
+            # 添加凭据到 Windows 凭据管理器（列表形式传参，避免密码特殊字符被 shell 解析）
+            result = subprocess.run(
+                ['cmdkey', '/generic:' + target, '/user:' + str(username), '/pass:' + str(password)],
+                capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                print(f"添加凭据失败，无法连接 {ip}:{port}")
+                return False
+
+            # 启动 mstsc 连接（阻塞直到远程桌面关闭）
+            subprocess.call(['mstsc', '/v', f'{ip}:{port}'])
+            return True
         except Exception as e:
-            print(f"调用mstsc命令时出错: {e}")
+            print(f"运行mstsc时出错: {e}")
+            return False
         finally:
+            # 连接结束（或异常）后，清除刚刚添加的凭据
             try:
-                os.remove(rdp_file_path)
-            except Exception as e:
-                print(f"删除RDP文件时出错: {e}")
+                subprocess.run(['cmdkey', '/delete:' + target], capture_output=True, text=True)
+            except Exception:
+                pass
     '''
     def run_mstsc(self,ip,port,username,password):
         import subprocess
