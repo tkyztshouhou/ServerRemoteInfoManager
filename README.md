@@ -63,15 +63,26 @@
 
 ## 环境要求
 
-- Python 3.10.11
-- Windows 操作系统
-- 依赖库：`tkinter`（Python 标准库，无需额外安装）
+- **已发布版本（推荐）**：Windows 10 / 11 64 位，无需安装 Python 或任何依赖
+  - 安装版：`ServerRemoteInfoManager-2.2.20260825-Setup.exe`
+  - 绿色版：`ServerRemoteInfoManager-2.2.20260825-Portable.rar`（解压即用）
+- **源码运行**：Python 3.10.11 + `tkinter`（标准库）、`Pillow`，Windows 操作系统
 
 ## 安装步骤
 
-1. 确保已安装 Python 3.10.11 或更高版本
+### 方式一：安装版（推荐）
+1. 双击 `ServerRemoteInfoManager-2.2.20260825-Setup.exe`
+2. 按向导安装（默认安装到 `C:\Program Files\ServerRemoteInfoManager\`）
+3. 安装完成后从开始菜单或桌面快捷方式启动
+
+### 方式二：绿色版
+1. 解压 `ServerRemoteInfoManager-2.2.20260825-Portable.rar`
+2. 双击 `ServerRemoteInfoManager.exe` 直接运行，无需安装
+
+### 方式三：源码运行
+1. 确保已安装 Python 3.10.11 或更高版本，并安装依赖：`pip install -r requirements.txt`
 2. 克隆或下载本项目到本地
-3. 首次运行时程序会自动创建 `data.db` 数据库和 `logs/` 目录
+3. 首次运行时程序会自动创建数据库和日志目录
 4. 运行入口程序：
 
 ```bash
@@ -174,14 +185,20 @@ tools/
 img/
   sz.png              # 设置按钮图标
   mstsc.png           # RDP 连接图标
+  app.ico             # 程序图标（多尺寸 ICO）
   folder.png          # 分组展开状态图标（24x24）
   folder_badge_plus.png  # 分组折叠状态图标（24x24）
   btn-faqzsk.png      # FAQ 知识库按钮背景图（191x45）
   ...                 # 其他界面图标
 version.txt           # 版本信息（PyInstaller VSVersionInfo 格式，程序从中提取 FileVersion）
-data.db               # SQLite 数据库（首次运行自动创建）
-logs/                 # 日志目录（首次运行自动创建）
+build.spec            # PyInstaller 打包配置
+installer.iss         # Inno Setup 安装包脚本
+build_release.ps1     # 一键打包发布脚本
 ```
+
+> **数据目录说明**：已发布的 exe 版本，数据库 `data.db` 与日志 `logs/`
+> 存放于用户目录 `%LOCALAPPDATA%/ServerRemoteInfoManager/`（Program Files
+> 只读，不可写）；源码运行时则位于项目根目录。两者数据互不共享。
 
 ## 常见问题
 
@@ -207,16 +224,55 @@ A：编辑前需先在服务器树中点击选中目标主机行。如需取消�
 A：当前版本密码确实以明文存储在 SQLite 中（日志已脱敏）。RDP 连接不再产生含密码的临时文件。如需更高安全性，建议自行加密后再录入，或联系管理员规划加密存储方案。
 
 **Q：如何备份数据？**
-A：备份 `data.db` 文件即可。也可通过右键菜单的导入/导出功能导出为 JSON。
+A：已发布版本备份 `%LOCALAPPDATA%/ServerRemoteInfoManager/data.db` 即可；源码运行则备份项目根目录的 `data.db`。也可通过右键菜单的导入/导出功能导出为 JSON。
+
+**Q：安装版保存设置时报 "unable to open database file"？**
+A：通常是旧版本把数据写在 Program Files 只读目录导致。当前版本数据已自动存放于 `%LOCALAPPDATA%/ServerRemoteInfoManager/`，重装新版即可解决；若仍有问题，请以普通用户（非管理员）运行，或检查该目录是否有写权限。
+
+**Q：Ping 检测会弹出黑色命令行窗口吗？**
+A：不会。Windows 下 ping 子进程已通过 `CREATE_NO_WINDOW` 隐藏，检测期间仅显示进度窗口。
 
 ## 版本历史
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
-| 2.2.20260825 | 2026-08-25 | RDP 连接重构为临时 .rdp 配置文件 + 凭据管理器方式（连接前清理旧凭据、生成不含密码的临时配置文件、会话关闭后自动清理凭据与临时文件）；新增远程桌面高级选项（音频位置/剪贴板/驱动器映射/全屏/分辨率，持久化存储）；新增 Ping 批量检测（状态列绿✓/红✗）；新增服务器树下方左右布局功能区；密码列默认脱敏显示（右键可查看明文）；图标列缩小、IP地址列加宽；新增 FAQ 知识库按钮（占位）；顶部按钮区与相关标签不随界面背景变色；重命名分组（右键即时持久化）；编辑主机支持修改"主机类型"；窗口位置与大小记忆（关闭自动保存、启动自动恢复） |
+| 2.2.20260825 | 2026-08-25 | RDP 连接重构为临时 .rdp 配置文件 + 凭据管理器方式（连接前清理旧凭据、生成不含密码的临时配置文件、会话关闭后自动清理凭据与临时文件）；新增远程桌面高级选项（音频位置/剪贴板/驱动器映射/全屏/分辨率，持久化存储）；新增 Ping 批量检测（状态列绿✓/红✗）；新增服务器树下方左右布局功能区；密码列默认脱敏显示（右键可查看明文）；图标列缩小、IP地址列加宽；新增 FAQ 知识库按钮（占位）；顶部按钮区与相关标签不随界面背景变色；重命名分组（右键即时持久化）；编辑主机支持修改"主机类型"；窗口位置与大小记忆（关闭自动保存、启动自动恢复）；**发布独立 exe 安装版/绿色版（PyInstaller 打包，含运行环境，无需目标机装 Python）；修复 Ping 黑框、添加主机 exists 表名报错、exe 无图标、按钮图片缺失、保存设置失败（数据目录改 %LOCALAPPDATA%）** |
 | 2.1.20260825 | 2026-08-25 | RDP 连接重构为 Windows 凭据管理器方式（自动写入/清除凭据，不再生成临时文件）；编辑主机三项修复（选中数据获取错误、主机名修改无效、纯数字 IP 类型错误）并新增输入校验；RDP/URL 补齐连接确认弹框；新增鼠标中键释放焦点；修复分组展开状态多层级记录失败；修复空分组不刷新列表；修复启动 -font 报错；界面颜色设置实时生效；分组图标更换为 folder/folder_badge_plus |
 | 2.0.20260824 | 2026-08-24 | 新增设置按钮与配置管理；新增 SSH/VNC 一键连接；SSH 工具支持 XTerminal/PuTTY/MobaXterm/FinalShell/Xshell；设置窗口居中；字体/颜色应用到列表；新增颜色选择器；新增恢复默认设置按钮；保存设置后立即动态生效；服务器树/分组树添加图标（Font Awesome 6.4.0 离线字体）；分组展开状态持久化；修复 17 个 Bug |
 | 1.0.20240906 | 2024-09-06 | 初始版本 |
+
+## 打包发布
+
+项目提供一键打包脚本，生成安装版（Inno Setup）与绿色版（RAR）两种发行包。
+
+### 前置依赖
+- Python 3.10.11 + `pip install -r requirements.txt`（含 PyInstaller 6.3.0、Pillow）
+- Inno Setup 6（生成安装包，默认路径 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`）
+- WinRAR（生成绿色版，默认路径 `C:\Program Files (x86)\WinRAR\WinRAR.exe`）
+- `img/app.ico`：程序图标（多尺寸 ICO）
+
+### 打包命令
+```powershell
+# 在项目根目录执行（需 Bypass 执行策略）
+powershell -ExecutionPolicy Bypass -File .\build_release.ps1
+```
+脚本依次执行：
+1. `pyinstaller build.spec --noconfirm --clean` → 文件夹版（供安装包）
+2. 设置 `PYI_ONEFILE=1` 后 `pyinstaller build.spec` → 单文件 exe（供绿色版）
+3. `ISCC installer.iss` → 编译安装包 `dist/...-Setup.exe`
+4. WinRAR 压缩文件夹版 → `dist/...-Portable.rar`
+
+### 产物
+| 文件 | 说明 | 体积（约） |
+|------|------|-----------|
+| `dist/ServerRemoteInfoManager-2.2.20260825-Setup.exe` | 安装版 | 14.8 MB |
+| `dist/ServerRemoteInfoManager-2.2.20260825-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
+| `dist/ServerRemoteInfoManager.exe` | 单文件 exe（备用） | 23.5 MB |
+
+### 发布到 GitHub Release
+- Tag：`v2.2.20260825`
+- 上传上述两个发行包作为附件
+- Release notes 复用 `更新说明.txt` 本次更新内容
 
 ## 许可证
 

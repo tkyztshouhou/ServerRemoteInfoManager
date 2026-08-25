@@ -76,6 +76,30 @@
      （last_window_x / y / width / height）
    - 下次启动时自动恢复上次布局，无需手动调整
 
+12. 打包发布（安装版 + 绿色版）
+   - 使用 PyInstaller 6.3.0 打包为独立 exe，内嵌 Python 运行环境
+     （含 tkinter/tcl-tk、Pillow 等全部依赖），无需目标机器安装
+     Python 即可运行
+   - 提供两种发行包：
+     * 安装版（ServerRemoteInfoManager-2.2.20260825-Setup.exe）：
+       Inno Setup 制作，安装到 Program Files，创建开始菜单/桌面
+       快捷方式（当前用户），自带有效程序图标
+     * 绿色版（ServerRemoteInfoManager-2.2.20260825-Portable.rar）：
+       RAR 压缩的单文件 exe，解压即用，无需安装
+   - 数据目录改为用户可写目录 %LOCALAPPDATA%/ServerRemoteInfoManager
+     （Program Files 只读，原相对路径写法会导致保存设置失败）
+   - 资源（img/version.txt）基于 PyInstaller 运行时目录解析，兼容
+     打包后与源码两种运行方式
+
+13. 本轮 Bug 修复
+   - 修复 Ping 批量检测时弹出黑色控制台窗口（Windows 下 ping 子进程
+     已加 CREATE_NO_WINDOW + STARTUPINFO 隐藏）
+   - 修复添加主机时 exists 方法报"非法表名 server"（应为 servers）
+   - 修复 exe 无图标问题（app.ico 原为无效空文件，已用 top.png 重制
+     为 16/24/32/48/64/128/256 多尺寸有效 ICO）
+   - 修复 Ping/FAQ 按钮图片缺失（相对路径 img/xxx.png 在打包后失效，
+     改为基于资源目录 self._img_dir 加载）
+
 --------------------------------------------------------------------------------
 【历史更新记录】
 --------------------------------------------------------------------------------
@@ -122,5 +146,9 @@
    清理凭据与临时文件。连接体验不变，远程桌面高级选项随连接自动生效。
 2. 服务器树密码列默认脱敏显示（*********），查看明文需选中行后右键
    "显示密码"。
+3. 数据目录变更：数据库 data.db 与日志 logs/ 由"程序所在目录"改为
+   用户目录 %LOCALAPPDATA%/ServerRemoteInfoManager/（Program Files
+   只读，旧版在该目录写数据会失败）。已发布的 exe 版本数据自动存放于此；
+   源码运行时仍沿用项目根目录。
 
 ================================================================================

@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -24,10 +25,29 @@ import re
 class infoServer:
     def __init__(self, master):
         self.master = master    # 窗口
+        # ---- 资源/数据目录解析（兼容 PyInstaller 打包与源码运行）----
+        # 程序根目录：打包后为 sys._MEIPASS（_internal），源码运行时为项目根
+        if getattr(sys, 'frozen', False):
+            app_base = sys._MEIPASS
+        else:
+            app_base = os.path.dirname(os.path.abspath(__file__))
+            # 源码运行时 __file__ 在 Object/，上溯一级到项目根
+            if os.path.basename(app_base) == 'Object':
+                app_base = os.path.dirname(app_base)
+        self._img_dir = os.path.join(app_base, 'img')
+        self.master.iconphoto(True, tk.PhotoImage(file=os.path.join(self._img_dir, 'top.png')))
+
+        # 用户可写数据目录：%LOCALAPPDATA%/ServerRemoteInfoManager（Program Files 只读，不能写）
+        appdata = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+        user_data_dir = os.path.join(appdata, 'ServerRemoteInfoManager')
+        if not os.path.exists(user_data_dir):
+            os.makedirs(user_data_dir, exist_ok=True)
+        self.db_path = os.path.join(user_data_dir, 'data.db')
+
         # 从 version.txt 读取版本号（VSVersionInfo 格式则提取 FileVersion 字段）
         version = ''
         try:
-            version_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'version.txt')
+            version_path = os.path.join(app_base, 'version.txt')
             with open(version_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             m = re.search(r"StringStruct\('FileVersion',\s*'([^']+)'\)", content)
@@ -45,14 +65,8 @@ class infoServer:
         self.master.title(f"主机运维管理工具    {version} -LiuShan")
         self.master.geometry('1366x768+50+0')   #将该行代码修改为分辨率可自定义调整窗口大小
         self.master.resizable(width=True, height=True)
-        # B18: 使用绝对路径加载图标，避免工作目录不在项目根目录时找不到图片
-        self._img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'img')
-        self.master.iconphoto(True, tk.PhotoImage(file=os.path.join(self._img_dir, 'top.png')))
-        # B19: 使用项目根目录绝对路径，避免 os.getcwd() 依赖启动目录
-        self._project_root = os.path.dirname(os.path.abspath(__file__))
-        self.db_path = os.path.join(self._project_root, 'data.db')
         self.db = DataAccess(self.db_path)
-        self.log = logs()
+        self.log = logs(user_data_dir)
         self.too = too(self.db_path)
         
 
@@ -315,7 +329,7 @@ class infoServer:
         
         # Ping检测按钮（左，图片背景，与FAQ按钮风格统一）
         try:
-            self.ping_image = tk.PhotoImage(file="img/btn-ping.png")
+            self.ping_image = tk.PhotoImage(file=os.path.join(self._img_dir, 'btn-ping.png'))
             self.ping_btn = tk.Button(self.top_btn_container, image=self.ping_image, command=self.ping_all_servers,
                                       width=191, height=45, borderwidth=0, bg='#F0F0F0', activebackground='#F0F0F0')
             self.ping_btn.pack(side=tk.LEFT, padx=(25, 10))
@@ -328,7 +342,7 @@ class infoServer:
 
         # FAQ按钮（右，右侧外边距与左侧一致）
         try:
-            self.faq_image = tk.PhotoImage(file="img/btn-faqzsk.png")
+            self.faq_image = tk.PhotoImage(file=os.path.join(self._img_dir, 'btn-faqzsk.png'))
             self.faq_btn = tk.Button(self.top_btn_container, image=self.faq_image, command=self.show_faq, 
                                     width=191, height=45, borderwidth=0)
             self.faq_btn.pack(side=tk.RIGHT, padx=(10, 25))
@@ -1146,7 +1160,7 @@ class infoServer:
                 messagebox.showinfo('提示', '主机地址不能为空')
                 self.log.write_log_error('主机地址不能为空，添加失败')
                 return
-            if self.db.exists(name,'server'):
+            if self.db.exists(name,'servers'):
                 messagebox.showinfo('提示', '主机名已存在')
                 self.log.write_log_error('主机名已存在，添加失败')
                 return
@@ -2066,9 +2080,14 @@ class infoServer:
                     try:
                         if platform.system().lower() == 'windows':
                             cmd = ['ping', '-n', '1', '-w', '1000', ping_host]
+                            si = subprocess.STARTUPINFO()
+                            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                            result = subprocess.run(cmd, capture_output=True, text=True,
+                                                    timeout=2, startupinfo=si,
+                                                    creationflags=subprocess.CREATE_NO_WINDOW)
                         else:
                             cmd = ['ping', '-c', '1', '-W', '1', ping_host]
-                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                            result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
                         is_online = result.returncode == 0
                         result_queue.put((idx, item, is_online, host))
                     except Exception as e:
