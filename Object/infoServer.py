@@ -293,6 +293,11 @@ class infoServer:
         self.lable1.pack(side=tk.TOP,fill=tk.X)
         self.server_info = tk.Text(self.left_container)
         self.server_info.pack(side=tk.LEFT,fill=tk.BOTH,expand=True)
+        # 跟踪当前展示说明对应的主机，用于实时保存编辑
+        self.current_info_host = None
+        # 实时编辑保存：按键即存，失焦兜底保存
+        self.server_info.bind('<KeyRelease>', lambda e: self.save_current_server_info())
+        self.server_info.bind('<FocusOut>', lambda e: self.save_current_server_info())
         # 添加滚动条
         info_Scrollbar = ttk.Scrollbar(self.left_container, orient=tk.VERTICAL, command=self.server_info.yview)
         info_Scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -308,11 +313,19 @@ class infoServer:
         self.top_btn_container = tk.Frame(self.right_container, bg='#F0F0F0')
         self.top_btn_container.pack(side=tk.TOP, fill=tk.X, pady=(20, 8))
         
-        # Ping检测按钮（左，左侧外边距与右侧一致、与FAQ间距一致）
-        self.ping_btn = tk.Button(self.top_btn_container, text="Ping检测", width=15, height=2, 
-                                 command=self.ping_all_servers, bg='#2196F3', fg='white')
-        self.ping_btn.pack(side=tk.LEFT, padx=(25, 10))
-        
+        # Ping检测按钮（左，图片背景，与FAQ按钮风格统一）
+        try:
+            self.ping_image = tk.PhotoImage(file="img/btn-ping.png")
+            self.ping_btn = tk.Button(self.top_btn_container, image=self.ping_image, command=self.ping_all_servers,
+                                      width=191, height=45, borderwidth=0, bg='#F0F0F0', activebackground='#F0F0F0')
+            self.ping_btn.pack(side=tk.LEFT, padx=(25, 10))
+        except Exception as e:
+            # 图片不存在时回退为文字按钮
+            self.ping_btn = tk.Button(self.top_btn_container, text="Ping检测", width=15, height=2,
+                                      command=self.ping_all_servers, bg='#2196F3', fg='white')
+            self.ping_btn.pack(side=tk.LEFT, padx=(25, 10))
+            self.log.write_log_error(f'Ping图片加载失败: {e}')
+
         # FAQ按钮（右，右侧外边距与左侧一致）
         try:
             self.faq_image = tk.PhotoImage(file="img/btn-faqzsk.png")
@@ -564,10 +577,9 @@ class infoServer:
             # 更新 Treeview 样式（ttk.Treeview 的字体只能通过 Style 设置，不支持 -font 选项）
             style = ttk.Style()
             style.configure('Treeview', font=(font_name, int(font_size)),
-                            background=bg_color, foreground=font_color,
-                            fieldbackground=bg_color)
+                            foreground=font_color, rowheight=25)
             style.configure('Treeview.Heading', font=(font_name, int(font_size), 'bold'),
-                            background=bg_color, foreground=font_color)
+                            foreground=font_color)
 
             # 应用服务器说明区背景色和字体
             if info_bg_color is not None:
@@ -629,8 +641,7 @@ class infoServer:
             # 保持新容器区域为中性灰背景，不跟随全局背景色变化：
             # 左侧服务器说明区、右侧配置区及其内部容器/标题标签均固定 #F0F0F0
             for _w in (self.new_container, self.left_container, self.right_container,
-                       self.ping_frame, self.faq_frame, self.rdp_frame, self.rdp_inner,
-                       self.rdp_canvas):
+                       self.top_btn_container, self.rdp_frame, self.rdp_inner):
                 try:
                     _w.configure(bg='#F0F0F0')
                 except Exception:
@@ -1527,7 +1538,8 @@ class infoServer:
                 self.server_tree.delete(*self.server_tree.get_children())
                 for r in servers:
                     icon = self._get_server_icons(r[1])
-                    self.server_tree.insert('', "end", image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
+                    self.server_tree.insert('', "end", image=icon if icon else '',
+                                            values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
 
     # 分组右键事件
     def tree_right_click(self, event):
@@ -1913,6 +1925,8 @@ class infoServer:
 
     # server_tree焦点变更事件
     def on_selection_change(self, event):
+        # 切换主机前，先保存上一台主机的说明编辑
+        self.save_current_server_info()
         selected_item  = self.server_tree.selection()
         if selected_item:
             item = self.server_tree.item(selected_item)
@@ -1938,9 +1952,22 @@ class infoServer:
             self.server_info.config(fg=tag_fg)
             self.server_info.delete('1.0', tk.END)
             self.server_info.insert('1.0', server_info_text, 'default')
+            # 更新当前主机跟踪，供实时保存使用
+            self.current_info_host = sever_host
             # B28: 移除调试输出
             self.server_info.update()
             self.master.after(50, lambda: self.server_info.update_idletasks())
+
+    # 实时保存当前主机说明编辑
+    def save_current_server_info(self):
+        host = getattr(self, 'current_info_host', None)
+        if not host:
+            return
+        try:
+            text = self.server_info.get('1.0', tk.END).rstrip('\n')
+            self.db.update_server('server_info', text, host)
+        except Exception as e:
+            self.log.write_log_error(f'保存服务器说明失败: {e}')
 
     # group_tree焦点变更事件
     def on_group_selection_change(self, event):
@@ -1955,7 +1982,8 @@ class infoServer:
             res = self.db.get_servers_by_group_id(group_id)
             for r in res:
                 icon = self._get_server_icons(r[1])
-                self.server_tree.insert('', 'end', image=icon if icon else '', values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
+                self.server_tree.insert('', 'end', image=icon if icon else '',
+                                        values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
 
 
     # self.top的位置 添加主机用
