@@ -6,9 +6,9 @@ import os
 
 class logs:
     def __init__(self, user_data_dir=None):
-        # 延迟导入 too 类，避免循环导入
-        from tools.tool import too
-        self.too = too()
+        # 延迟导入 Tool 类，避免循环导入
+        from tools.tool import Tool
+        self.too = Tool()
         # 日志目录：优先使用用户可写数据目录（打包后 Program Files 只读）
         if user_data_dir:
             self.log_path = os.path.join(user_data_dir, 'logs')

@@ -3,7 +3,7 @@
 # Python 版本：3.10.11（从 3.8.5 升级）
 # 操作系统：Windows 10 / 11 64 位
 #
-# 本项目仅使用 Python 标准库，运行时无第三方 pip 依赖：
+# 本项目 GUI / 数据库 / 多线程均使用 Python 标准库：
 #   tkinter      (GUI)
 #   sqlite3      (数据库)
 #   os / re      (系统与正则)
@@ -12,6 +12,14 @@
 #   datetime     (时间)
 #   webbrowser   (打开浏览器)
 #
+# 以下为 FAQ 知识库（F16）新增的运行时依赖：
+# ============================================
+
+# FAQ Markdown 渲染（Markdown -> HTML，配合 tkhtmlview 展示）
+markdown==3.5.1
+# FAQ 富文本渲染组件（tkinter + HTML 渲染）
+tkhtmlview==0.0.9
+
 # 以下为开发与打包阶段可选工具，非运行必需：
 # ============================================
 

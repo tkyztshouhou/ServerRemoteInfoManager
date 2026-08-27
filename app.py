@@ -1,5 +1,5 @@
 import tkinter as tk
-from Object.infoServer import infoServer
+from Object.infoServer import InfoServer
 from tools.logs import logs
 
 '''
@@ -12,5 +12,5 @@ log = logs()
 
 log.write_log(' 程序启动 ')
 root = tk.Tk()
-infoServer(root)
+InfoServer(root)
 root.mainloop()

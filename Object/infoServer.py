@@ -4,9 +4,9 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 from tkinter import colorchooser
-from Object.gui_DA import *
+from Object.gui_DA import DataAccess
 from tools.logs import logs
-from tools.tool import too
+from tools.tool import Tool
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import threading
 import subprocess
@@ -22,7 +22,7 @@ import re
 '''
 
 # 创建主窗口
-class infoServer:
+class InfoServer:
     def __init__(self, master):
         self.master = master    # 窗口
         # ---- 资源/数据目录解析（兼容 PyInstaller 打包与源码运行）----
@@ -67,7 +67,7 @@ class infoServer:
         self.master.resizable(width=True, height=True)
         self.db = DataAccess(self.db_path)
         self.log = logs(user_data_dir)
-        self.too = too(self.db_path)
+        self.too = Tool(self.db_path)
         
 
         # 创建图片 - B18: 使用绝对路径
@@ -177,28 +177,28 @@ class infoServer:
 
         self.left_frame = tk.Frame(self.master, bg='#F0F0F0')
         self.left_frame.pack(side=tk.LEFT, fill=tk.Y,padx=10, pady=10)   # 填充 纵向
-        self.left_frame.pack_propagate(1)               # 允许内部控件影响外层控件大小 (1=True)
+        self.left_frame.pack_propagate(True)               # 允许内部控件影响外层控件大小 (True)
         self.right_frame = tk.Frame(self.master, bg='#F0F0F0')
         self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,padx=10, pady=10)
-        self.right_frame.pack_propagate(0)
+        self.right_frame.pack_propagate(False)
 
         # top（保持原始背景色 #F0F0F0，不跟随全局背景变化，避免按钮图片突兀）
         self.top_frame = tk.Frame(self.top, bg='#F0F0F0')
         self.top_frame.pack(side=tk.LEFT, fill=tk.Y)     # 填充 横向
-        self.top_frame.pack_propagate(1)                # 允许内部控件影响外层控件大小 (1=True)
+        self.top_frame.pack_propagate(True)                # 允许内部控件影响外层控件大小 (True)
 
         self.top_R = tk.Frame(self.top, bg='#F0F0F0')
         self.top_R.pack(side=tk.LEFT, fill=tk.Y)     # 填充 横向
-        self.top_R.pack_propagate(1)                # 允许内部控件影响外层控件大小 (1=True)
+        self.top_R.pack_propagate(True)                # 允许内部控件影响外层控件大小 (True)
 
         # 创建右侧服务器列表框架，右侧区域分为上下两部分，上方显示服务器信息，下方显示服务器详细信息
         self.right_frame_top = tk.Frame(self.right_frame, bg='#F0F0F0') # 填充 纵向
         self.right_frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.right_frame_top.pack_propagate(0)                  # 禁止内部控件影响外层控件大小 (0=False)
+        self.right_frame_top.pack_propagate(False)                  # 禁止内部控件影响外层控件大小 (False)
 
         self.right_frame_bottom = tk.Frame(self.right_frame, bg='#F0F0F0')  # 填充 纵向
         self.right_frame_bottom.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True,pady=5)
-        self.right_frame_bottom.pack_propagate(0)                    # 禁止内部控件影响外层控件大小 (0=False)
+        self.right_frame_bottom.pack_propagate(False)                    # 禁止内部控件影响外层控件大小 (False)
         
         # 初始化btn按钮
         self.top_frame_button_1 = tk.Button(self.top_frame,  bd=0,image=self.fz, compound=tk.LEFT, bg='#F0F0F0', command=self.add_folder_window)
@@ -368,8 +368,7 @@ class infoServer:
         #绑定窗口改变事件
         self.master.bind('<Configure>', update_width)
 
-        # 左键双击事件
-        # self.group_tree.bind("<Double-1>", self.groupTree_click)
+        # 左键双击事件（在 server_tree 上触发连接）
         self.server_tree.bind("<Double-1>" ,lambda event: self.connect_server(event))
 
         # server_tree焦点变更事件
@@ -1134,7 +1133,7 @@ class infoServer:
 
     # 添加主机window
     def add_server_window(self):
-        def add_server ():
+        def add_server_entry():
             conn_type = down.get()
             name = name_entry.get()
             host = host_entry.get()
@@ -1189,7 +1188,7 @@ class infoServer:
         # 锁定焦点
         # self.top.grab_set()
         # 设置窗口宽高固定
-        self.top.resizable(0,0)
+        self.top.resizable(False, False)
         # 窗口置顶
         # self.top.attributes('-topmost', 1)
         lab1 = tk.Label(self.top, text="主机类型：")
@@ -1222,7 +1221,7 @@ class infoServer:
         info_text = tk.Text(self.top, height=4, width=23)
         info_text.pack()
 
-        btn = tk.Button(self.top, text="确定", width=10,command=add_server) 
+        btn = tk.Button(self.top, text="确定", width=10,command=add_server_entry) 
                                                                                     
         btn.pack(pady='5')
         btn2 = tk.Button(self.top, text="取消", width=10,command=self.top.destroy)
@@ -1260,7 +1259,7 @@ class infoServer:
         masked_password = current_password[:2] + '*' * (len(current_password) - 2) if len(current_password) > 2 else '*' * len(current_password)
         self.log.write_log_info('主机名：' + current_name + ',主机ip : ' + current_host + '端口号：' + str(current_port) + '用户名：' + current_username + '密码：' + masked_password)
         
-        def edit_da():
+        def edit_server_entry():
             # 2. 根据编辑主机的下拉框判断要修改的字段
             select_collu = down.get()
             host = current_host
@@ -1358,7 +1357,7 @@ class infoServer:
         self.top_master(self.top, 300)
         # 锁定焦点
         self.top.grab_set()
-        self.top.resizable(0, 0)
+        self.top.resizable(False, False)
         lab1 = tk.Label(self.top, text="请选择要修改的内容：")
         lab1.pack(pady=5)
         down = ttk.Combobox(self.top, values=['主机名', '主机地址','端口号','用户名','密码','主机类型','分组','服务器说明'],state='readonly', width=20)
@@ -1379,7 +1378,7 @@ class infoServer:
                 type_win = tk.Toplevel(self.top)
                 type_win.title("选择主机类型")
                 type_win.grab_set()
-                type_win.resizable(0, 0)
+                type_win.resizable(False, False)
                 type_win.configure(bg='#F0F0F0')
 
                 current_type = item_values[0] if len(item_values) > 0 else 'SSH'
@@ -1410,7 +1409,7 @@ class infoServer:
 
         down.bind('<<ComboboxSelected>>', lambda e: on_type_select())
 
-        btn = tk.Button(self.top, text="确定", width=10, command=edit_da)
+        btn = tk.Button(self.top, text="确定", width=10, command=edit_server_entry)
         btn.pack(pady=5)
         btn2 = tk.Button(self.top, text="取消", width=10, command=self.top.destroy)
         btn2.pack(pady=5)
@@ -1441,7 +1440,7 @@ class infoServer:
         # 锁定焦点
         self.top.grab_set()
         # 设置窗口宽高固定
-        self.top.resizable(0,0)
+        self.top.resizable(False, False)
         # 窗口置顶
         self.top.attributes('-topmost', 1)
         lab1 = tk.Label(self.top, text="添加位置：")
@@ -1649,7 +1648,7 @@ class infoServer:
         self.top.title("重命名分组")
         self.top_master(self.top, 150)
         self.top.grab_set()
-        self.top.resizable(0, 0)
+        self.top.resizable(False, False)
 
         lab1 = tk.Label(self.top, text="新分组名称：")
         lab1.pack(pady=10)
@@ -1917,25 +1916,6 @@ class infoServer:
     def show_connection_error(self, error_msg):
         """显示连接错误信息"""
         messagebox.showerror('连接失败', error_msg)
-                                                                                                                   
-    # group_tree左键双击事件
-    # def groupTree_click(self, event):
-    #     self.server_tree.delete(*self.server_tree.get_children())
-    #     self.log.write_log_info('事件触发：groupTree_click')
-    #     # 获取group_tree的focus
-    #     selected_item = self.group_tree.focus()
-    #     if selected_item == '':
-    #         messagebox.showerror('错误', '请选择要查看的分组！')
-    #     else:
-    #         # 获取parent_id节点名字
-    #         name = self.group_tree.item(selected_item)['text']
-    #         self.log.write_log_info('查看的分组名是：' + name)
-    #         # get当前分组id
-    #         id = self.db.get_group_id(name)
-    #         res = self.db.get_servers_by_group_id(id)
-    #         # 插入到server_tree中
-    #         for r in res:
-    #             self.server_tree.insert('', 'end',values=(r[1],r[2],r[3],r[4],r[5]))
 
     # server_tree焦点变更事件
     def on_selection_change(self, event):
@@ -2157,10 +2137,15 @@ class infoServer:
             h = h.split('@', 1)[1]
         return h.strip()
 
-    # FAQ知识库功能（暂不实现）
+    # FAQ知识库功能（F16）
     def show_faq(self):
-        """显示FAQ知识库（功能暂不实现）"""
-        messagebox.showinfo('提示', 'FAQ知识库功能正在开发中，敬请期待！')
+        """打开 FAQ 知识库（独立 Toplevel 窗口）"""
+        try:
+            from faq.main import open_faq
+            open_faq(self.master)
+        except Exception as e:
+            self.log.write_log_error('打开 FAQ 知识库失败: ' + str(e))
+            messagebox.showerror('错误', 'FAQ 知识库打开失败：' + str(e))
         self.log.write_log_info('用户点击了FAQ知识库按钮')
     
     # 创建远程桌面高级选项UI
@@ -2243,11 +2228,46 @@ class infoServer:
         
         resolution_combo.bind('<<ComboboxSelected>>', on_resolution_change)
         
-        # 保存按钮
-        save_btn = tk.Button(self.rdp_inner, text="保存设置", command=self.save_rdp_settings,
-                            bg='#4CAF50', fg='white', width=10)
-        save_btn.pack(pady=(2, 6))
-    
+        # 保存设置按钮（美化：突出配色 + 悬停/点击/禁用多状态反馈 + 磁盘图标）
+        save_btn = tk.Button(
+            self.rdp_inner, text="💾 保存设置", command=self.save_rdp_settings,
+            bg='#4CAF50', fg='white',
+            activebackground='#388E3C', activeforeground='white',
+            disabledforeground='#9E9E9E',
+            font=('Microsoft YaHei', 10, 'bold'),
+            relief='flat', bd=0, padx=20, pady=7, cursor='hand2',
+        )
+        save_btn.pack(pady=(10, 12))
+        self._rdp_save_btn = save_btn
+
+        # 悬停 / 按下 视觉反馈
+        def _on_enter(e):
+            if str(save_btn['state']) != 'disabled':
+                save_btn.config(bg='#43A047')
+        def _on_leave(e):
+            if str(save_btn['state']) != 'disabled':
+                save_btn.config(bg='#4CAF50')
+        def _on_press(e):
+            if str(save_btn['state']) != 'disabled':
+                save_btn.config(bg='#388E3C')
+        def _on_release(e):
+            if str(save_btn['state']) != 'disabled':
+                save_btn.config(bg='#43A047')
+        save_btn.bind('<Enter>', _on_enter)
+        save_btn.bind('<Leave>', _on_leave)
+        save_btn.bind('<ButtonPress-1>', _on_press)
+        save_btn.bind('<ButtonRelease-1>', _on_release)
+
+    def set_rdp_save_enabled(self, enabled: bool):
+        """切换远程桌面“保存设置”按钮的可用状态（禁用时给出清晰视觉反馈）。"""
+        btn = getattr(self, '_rdp_save_btn', None)
+        if btn is None:
+            return
+        if enabled:
+            btn.config(state='normal', bg='#4CAF50', fg='white')
+        else:
+            btn.config(state='disabled', bg='#A5D6A7', fg='#E0E0E0')
+
     # 加载远程桌面设置
     def load_rdp_settings(self):
         """从数据库加载远程桌面设置"""

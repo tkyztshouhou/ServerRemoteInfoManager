@@ -15,7 +15,7 @@ import re
     @ Description: 工具类
 '''
 
-class too:
+class Tool:
     def __init__(self, db_path=None):
         self.db_path = db_path
 

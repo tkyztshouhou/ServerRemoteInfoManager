@@ -115,7 +115,26 @@
 | F13 | ESC 关闭弹窗 | `infoServer.py:87,1676` | ✅ **已实现** — 主窗口与子窗口（添加/编辑弹窗）均已 `bind('<Escape>', ...)` 关闭窗口 |
 | F14 | 分组双击查看主机 | `infoServer.py:184, 692-708` | ❌ `groupTree_click` 被注释，双击分组无反应（改为 `<<TreeviewSelect>>` 单击触发） |
 | F15 | RDP 凭据异常残留清理 | `tool.py:run_mstsc` | ⚠️ 程序被强杀（断电/任务管理器结束进程）时，`finally` 不执行，凭据 `TERMSRV/ip` 及临时 .rdp 文件可能残留；2.2 版起每次连接前会主动清理该主机旧凭据（残留凭据风险已大幅缓解，临时 .rdp 文件不含密码，泄露风险低）；可手动 `cmdkey /delete:TERMSRV/ip` 清除（正常关闭远程桌面后均会自动清除） |
-| F16 | FAQ 知识库功能 | `infoServer.py:show_faq` | ❌ 按钮已放置（img/btn-faqzsk.png，191x45），点击仅提示"功能开发中"，知识库内容与交互逻辑后续版本实现 |
+| F16 | FAQ 知识库功能 | `infoServer.py:show_faq` | ✅ **已实现（3.0 完善）** — 新增根目录 `faq/` Python 包（职责分离：da.py / server.py / ui.py / main.py / sample_data.py / __init__.py）：点击 FAQ 按钮打开独立 Toplevel 窗口；左侧 ttk.Treeview 树形分类导航（支持动态添加分类/子分类），右侧上搜索栏+结果列表、下 Markdown 渲染区（tkhtmlview，缺失时降级纯文本）；SQLite3 独立库 `faq.db`（%LOCALAPPDATA%/ServerRemoteInfoManager）；支持关键词模糊检索（LIKE）并以 daemon 线程异步执行、主线程 `after()` 回填避免 UI 卡顿；支持 text / sql / doc 三种内容类型预览；DA 层预留 `embedding()` 与 `vector_search()` RAG 扩展接口（后期可接入大模型实现向量检索+RAG）。`requirements.txt` 与 `build.spec` 已补充 `markdown`/`tkhtmlview` 依赖与隐藏导入。**3.0 完善**：新增/修改条目弹窗改用 grid 布局并居中显示，修复 pack 的 `expand=True` 耗尽空间导致"保存/取消"按钮被压缩为 1px 不可见的问题（已通过真实窗口四态测试验证按钮可见）；保存后状态栏反馈、ESC 关闭放弃更改；主窗口"保存设置"按钮美化（绿系悬停/按下渐变+磁盘图标+四态反馈，新增 `set_rdp_save_enabled` 禁用切换方法） |
+
+---
+
+## 三（续）、3.0.20260827 对话框完善与界面美化（F16 收尾）
+
+### 1. FAQ 新增/修改条目对话框修复与完善
+- **布局 bug 修复**：原对话框用 `pack` 布局，内容区 `text_frame(side=TOP, expand=True)` 先 pack 且 `expand=True` 会一次性耗尽窗口全部空间，导致后 pack 的按钮区 `btn_frame(side=BOTTOM)` 仅分到 1px 高度（请求 33px），"保存/取消"按钮被压缩不可见。改为 **grid 布局**：内容区行 `grid_rowconfigure(5, weight=1)` 拉伸占满剩余空间，按钮行固定第 6 行 `sticky='ew'` 恒定高度，按钮始终可见（已通过真实 map 窗口测试：`btn_frame y=477 h=33`，`BUTTON_VISIBLE: True`）。
+- **居中显示**：对话框尺寸 `560x520`，根据父窗口 `winfo_rootx/y/width/height` 计算中心偏移并 `geometry('+x+y')` 居中（原为默认左上角）。
+- **保存/取消明确化**：保存成功后状态栏反馈"已保存修改/已新增条目：xxx"；绑定 `<Escape>` 到对话框关闭（放弃更改），绑定已验证注册生效。
+
+### 2. 主窗口"保存设置"按钮美化（视觉突出 + 四态反馈）
+- 配色：绿系主色 `#4CAF50`，悬停 `#43A047`、按下 `#388E3C` 明暗渐变；禁用浅绿 `#A5D6A7` + 灰字。
+- 字体：`('Microsoft YaHei', 10, 'bold')` 加粗；内边距 `padx=20, pady=7`；左侧磁盘图标 `💾`；`cursor='hand2'` 手型光标。
+- 四态反馈：`<Enter>/<Leave>/<ButtonPress-1>/<ButtonRelease-1>` 实时切换背景；禁用态下悬停/点击不改变颜色；新增 `set_rdp_save_enabled(bool)` 方法供外部切换禁用状态。
+- 风格一致：保持 `relief='flat'`，未改变布局结构；与窗口其他 flat 按钮统一。
+
+### 3. 版本号更新
+- `version.txt`：`filevers`/`prodvers` 改为 `(3, 0, 2026, 827)`，`FileVersion`/`ProductVersion` 改为 `3.0.20260827`（程序窗口标题从此文件读取）
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `3.0.20260827`
 
 ---
 
@@ -156,36 +175,36 @@
 
 ## 五、代码兼容性问题（Python 3.10.11 升级相关）
 
-| # | 位置 | 问题 | 建议 |
-|---|------|------|------|
-| C1 | `tool.py:27` | `t.setDaemon(True)` 在 Python 3.10 已弃用，3.12 将移除 | 改为 `t.daemon = True` |
-| C2 | `tool.py:63` | `import re` 在方法内部，Python 3.10 虽支持但不符合 PEP 8 | 移到模块顶部 |
-| C3 | `infoServer.py:72, 80, 84` | `pack_propagate(1)` 中 `1` 作为布尔值 | 改为 `pack_propagate(True)` 更清晰 |
-| C4 | `infoServer.py:282, 449, 491` | `resizable(0, 0)` 中 `0` 作为布尔值 | 改为 `resizable(False, False)` |
-| C5 | `gui_DA.py:26` | `port int` 应为 `port INTEGER` | SQL 语法虽兼容但不规范 |
-| C6 | `infoServer.py:5` | `from Object.gui_DA import *` 通配符导入 | 建议改为 `from Object.gui_DA import DataAccess` |
-| C7 | 全局 | 相对路径 `./img/xxx.png` 依赖工作目录 | 建议使用 `os.path.dirname(__file__)` 构造绝对路径 |
-| C8 | `version.txt` | 版本信息仍为 `1.0.20240906`，与代码标题 `1.0.20250124` 不一致 | 同步更新 version.txt |
+| # | 位置 | 问题 | 建议 | 状态 | 修复措施 |
+|---|------|------|------|------|----------|
+| C1 | `tool.py:27` | `t.setDaemon(True)` 在 Python 3.10 已弃用，3.12 将移除 | 改为 `t.daemon = True` | ✅ 已解决 | 已在 B22 中改为 `t.daemon = True` |
+| C2 | `tool.py:63` | `import re` 在方法内部，Python 3.10 虽支持但不符合 PEP 8 | 移到模块顶部 | ✅ 已解决 | `re` 已移至模块顶部导入（第 9 行）；方法内的 `from tools.logs import logs` 作为延迟导入刻意保留（B23），并添加注释说明其为规避 `tool.py` 与 `logs.py` 循环依赖的必要手段，非 PEP 8 违规 |
+| C3 | `infoServer.py:179, 185, 188, 191, 194` | `pack_propagate(1)/(0)` 以整数作为布尔值 | 改为 `pack_propagate(True/False)` | ✅ 已解决 | 全部改为语义明确的 `True`/`False`（`infoServer.py` 共 6 处） |
+| C4 | `infoServer.py:1192, 1361, 1382, 1444, 1652` | `resizable(0, 0)` 以整数作为布尔值 | 改为 `resizable(False, False)` | ✅ 已解决 | 全部 5 处改为 `resizable(False, False)` |
+| C5 | `gui_DA.py:26` | `port int` 应为 `port INTEGER` | SQL 语法虽兼容但不规范 | ✅ 已解决 | `servers` 表 `port` 列类型由 `int` 改为标准 SQL `INTEGER`，保证跨数据库引擎类型解析正确 |
+| C6 | `infoServer.py:5` | `from Object.gui_DA import *` 通配符导入 | 改为显式导入 | ✅ 已解决 | 改为 `from Object.gui_DA import DataAccess`（经核查仅 `DataAccess` 被使用），消除命名空间污染并符合 PEP 8 |
+| C7 | 全局 | 相对路径 `./img/xxx.png` 依赖工作目录 | 用 `os.path.dirname(__file__)` 构造绝对路径 | ✅ 已解决 | `infoServer.py` 已统一使用基于 `__file__` 的 `_img_dir` 绝对路径；`gui_DA.py` 已使用基于 `__file__` 的 `db_path`（数据目录改 `%LOCALAPPDATA%\ServerRemoteInfoManager`），exe 与源码运行均无资源缺失 |
+| C8 | `version.txt` / `README.md` | 版本号不一致 | 同步更新 version.txt | ✅ 已解决 | 经核查 `version.txt` 已为 `2.2.20260825`，`README.md` 中的版本号、发布文件名、版本历史均已同步为 `2.2.20260825`，无冲突；`gui_DA.py` 中 `ssh_tool_type` 默认值保留为跨平台安全的 `xterm`（仅作读取失败回退，不影响兼容性） |
 
 ---
 
 ## 六、代码质量问题
 
-| # | 类别 | 问题描述 |
-|---|------|----------|
-| Q1 | 命名 | `too` 类名应为 `Tool`（类名应大写） |
-| Q2 | 命名 | `infoServer` 类名应为 `InfoServer`（类名应大写） |
-| Q3 | 命名 | `edit_da`、`add_server`（内部函数）命名风格不统一 |
-| Q4 | 重复代码 | ~~`edit_da` 中 6 个 `elif` 分支结构几乎相同~~ ✅ **已重构**（2.1 版）：统一为字段映射表 + 单一更新/刷新流程；`gui_DA.py` 各方法仍存在重复的连接管理模式 |
-| Q5 | 重复代码 | `gui_DA.py` 每个方法都重复 `sqlite3.connect` → `cursor` → `execute` → `close` 模式，应提取上下文管理器 |
-| Q6 | 异常处理 | 多处 `except Exception as e` 过于宽泛，吞掉所有异常（注：2.1 版分组状态保存/恢复已改为写错误日志而非静默） |
-| Q7 | 资源管理 | `gui_DA.py` 未使用 `with` 语句管理数据库连接，异常时连接不关闭 |
-| Q8 | 调试代码 | ~~`infoServer.py` 和 `gui_DA.py` 中大量 `print()` 未清理~~ ✅ **已清理**（B27/B28） |
-| Q9 | 注释 | `pack_propagate` 注释与代码行为相反（见 B20，已修复） |
-| Q10 | 死代码 | `infoServer.py:692-708` `groupTree_click` 整个方法被注释 |
-| Q11 | 死代码 | `Object/testInfoserver.py` 是早期原型，未接入主程序，应归档或删除 |
-| Q12 | 死代码 | `Object/gui_DA -20240905.py` 是旧版备份，应使用 git 管理而非保留文件副本 |
-| Q13 | 类型安全 | ~~`server_tree.item(...)['values'][1]` 取值后未做类型转换~~ ✅ **已修复**（B54）：树中取值统一 `str()` 转换 |
+| # | 类别 | 问题描述 | 状态 | 修复说明 |
+|---|------|----------|------|----------|
+| Q1 | 命名 | `too` 类名应为 `Tool`（类名应大写） | ✅ 已解决 | `tools/tool.py` 中类 `too` 重命名为 `Tool`；同步更新引用方 `tools/logs.py`（延迟导入 `from tools.tool import Tool`）、`Object/infoServer.py`（`from tools.tool import Tool` 及 `self.too = Tool(...)` 实例化）。实例变量名 `self.too` 保留不变，避免大范围改动带来的回归风险 |
+| Q2 | 命名 | `infoServer` 类名应为 `InfoServer`（类名应大写） | ✅ 已解决 | `Object/infoServer.py` 中类 `infoServer` 重命名为 `InfoServer`；同步更新入口 `app.py`（`from Object.infoServer import InfoServer` 与 `InfoServer(root)` 实例化） |
+| Q3 | 命名 | `edit_da`、`add_server`（内部函数）命名风格不统一 | ✅ 已解决 | `Object/infoServer.py` 中两个内部嵌套函数统一为语义清晰的 `snake_case`：`add_server`（嵌套于 `add_server_window`）重命名为 `add_server_entry`，`edit_da`（嵌套于 `edit_server`）重命名为 `edit_server_entry`，避免与 `self.db.add_server` 等公开方法混淆，并同步更新对应按钮 `command=` 绑定 |
+| Q4 | 重复代码 | `edit_da` 中 6 个 `elif` 分支结构几乎相同 | ✅ 已解决（2.1 版重构） | 见 B 系列记录：统一为字段映射表 + 单一更新/刷新流程；此外本次对 `gui_DA.py` 的连接管理模式也做了统一抽象（见 Q5/Q7） |
+| Q5 | 重复代码 | `gui_DA.py` 每个方法都重复 `sqlite3.connect` → `cursor` → `execute` → `close` 模式 | ✅ 已解决 | `Object/gui_DA.py` 新增 `_connect()` 上下文管理器方法（`@contextmanager`，`from contextlib import contextmanager`），统一所有方法的连接打开/关闭逻辑，消除了约 20 处重复的 `connect/cursor/close` 样板代码 |
+| Q6 | 异常处理 | 多处 `except Exception as e` 过于宽泛，吞掉所有异常 | ✅ 已解决 | `Object/gui_DA.py` 中数据访问层的宽泛 `except Exception` 已全部收窄为 `except sqlite3.Error`（及 `except sqlite3.IntegrityError`），仅捕获数据库相关异常，避免掩盖编程错误（如 `TypeError`/`NameError`）；`infoServer.py` 中 UI 层的 `force_refresh_ui` 等少数 `except Exception` 为向用户弹窗报错所需，属合理用法，已保留并注明 |
+| Q7 | 资源管理 | `gui_DA.py` 未使用 `with` 语句管理数据库连接，异常时连接不关闭 | ✅ 已解决 | 借助 Q5 的 `_connect()` 上下文管理器，所有数据访问方法均通过 `with self._connect() as (conn, cursor):` 使用连接，无论正常结束还是异常，`finally` 块保证连接关闭，杜绝连接泄漏 |
+| Q8 | 调试代码 | `infoServer.py` 和 `gui_DA.py` 中大量 `print()` 未清理 | ✅ 已解决（B27/B28） | 调试 `print` 已替换为 `logs` 日志记录 |
+| Q9 | 注释 | `pack_propagate` 注释与代码行为相反 | ✅ 已解决（B20） | 注释已在兼容性修复中更正为 `True`/`False` 语义 |
+| Q10 | 死代码 | `infoServer.py` 中 `groupTree_click` 整个方法被注释 | ✅ 已解决 | 已删除 `Object/infoServer.py` 中被注释掉的 `groupTree_click` 死代码块（约 17 行），并清理了第 372 行指向该方法的失效注释绑定 |
+| Q11 | 死代码 | `Object/testInfoserver.py` 是早期原型，未接入主程序 | ✅ 已解决 | 已归档至 `_archive/testInfoserver.py`，并从 `Object/` 目录移除；`.gitignore` 已补充 `Object/testInfoserver.py` 规则，防止重新污染工作树 |
+| Q12 | 死代码 | `Object/gui_DA -20240905.py` 是旧版备份，应使用 git 管理 | ✅ 已解决 | 已归档至 `_archive/gui_DA-20240905.py`（文件名空格规范化），并从 `Object/` 目录移除；`.gitignore` 已补充 `_archive/` 与 `gui_DA -*.py` 规则 |
+| Q13 | 类型安全 | `server_tree.item(...)['values'][1]` 取值后未做类型转换 | ✅ 已解决（B54） | 树中取值统一 `str()` 转换 |
 
 ---
 

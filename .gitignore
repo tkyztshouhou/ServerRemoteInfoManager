@@ -209,6 +209,12 @@ dmypy.json
 # ==============
 # CodeBuddy 计划目录（本地开发数据，无需同步）
 .codebuddy/plans/
+.codebuddy/
+
+# 原型/备份文件归档（历史参考，非源码）
+_archive/
+gui_DA -*.py
+Object/testInfoserver.py
 
 # 本地数据库文件
 data.db

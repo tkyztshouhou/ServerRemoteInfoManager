@@ -48,7 +48,7 @@
 - 启用剪贴板、映射本地驱动器、全屏模式
 - 远程桌面分辨率：多档预设 + 自定义宽x高
 - 所有选项即时保存到 SQLite，重启自动恢复；RDP 连接时自动应用
-- FAQ 知识库按钮（img/btn-faqzsk.png，191x45）已放置，功能开发中
+- FAQ 知识库按钮（img/btn-faqzsk.png，191x45）已放置，点击打开独立 FAQ 窗口：左侧树形分类导航、右侧搜索栏+结果列表+Markdown 渲染区，支持关键词模糊检索（多线程）与 text/sql/doc 三种内容预览，数据存于独立 `faq.db`
 
 ### 设置
 - 工具路径配置（SSH/VNC 工具可执行文件路径）
@@ -64,19 +64,19 @@
 ## 环境要求
 
 - **已发布版本（推荐）**：Windows 10 / 11 64 位，无需安装 Python 或任何依赖
-  - 安装版：`ServerRemoteInfoManager-2.2.20260825-Setup.exe`
-  - 绿色版：`ServerRemoteInfoManager-2.2.20260825-Portable.rar`（解压即用）
+  - 安装版：`ServerRemoteInfoManager-3.0.20260827-Setup.exe`
+  - 绿色版：`ServerRemoteInfoManager-3.0.20260827-Portable.rar`（解压即用）
 - **源码运行**：Python 3.10.11 + `tkinter`（标准库）、`Pillow`，Windows 操作系统
 
 ## 安装步骤
 
 ### 方式一：安装版（推荐）
-1. 双击 `ServerRemoteInfoManager-2.2.20260825-Setup.exe`
+1. 双击 `ServerRemoteInfoManager-3.0.20260827-Setup.exe`
 2. 按向导安装（默认安装到 `C:\Program Files\ServerRemoteInfoManager\`）
 3. 安装完成后从开始菜单或桌面快捷方式启动
 
 ### 方式二：绿色版
-1. 解压 `ServerRemoteInfoManager-2.2.20260825-Portable.rar`
+1. 解压 `ServerRemoteInfoManager-3.0.20260827-Portable.rar`
 2. 双击 `ServerRemoteInfoManager.exe` 直接运行，无需安装
 
 ### 方式三：源码运行
@@ -236,6 +236,7 @@ A：不会。Windows 下 ping 子进程已通过 `CREATE_NO_WINDOW` 隐藏，检
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| 3.0.20260827 | 2026-08-27 | **FAQ 知识库对话框完善**：新增/修改条目弹窗改为 grid 布局并居中显示，修复因 pack 的 expand 空间耗尽导致"保存/取消"按钮被压缩为 1px 不可见的问题；保存/取消按钮明确化（保存后状态栏反馈、ESC 关闭放弃更改）；**主窗口"保存设置"按钮美化**：绿系主色 + 悬停/按下明暗渐变、加粗字体、加大内边距、磁盘图标（💾）、手型光标，并完善默认/悬停/点击/禁用四态视觉反馈（新增 `set_rdp_save_enabled` 方法） |
 | 2.2.20260825 | 2026-08-25 | RDP 连接重构为临时 .rdp 配置文件 + 凭据管理器方式（连接前清理旧凭据、生成不含密码的临时配置文件、会话关闭后自动清理凭据与临时文件）；新增远程桌面高级选项（音频位置/剪贴板/驱动器映射/全屏/分辨率，持久化存储）；新增 Ping 批量检测（状态列绿✓/红✗）；新增服务器树下方左右布局功能区；密码列默认脱敏显示（右键可查看明文）；图标列缩小、IP地址列加宽；新增 FAQ 知识库按钮（占位）；顶部按钮区与相关标签不随界面背景变色；重命名分组（右键即时持久化）；编辑主机支持修改"主机类型"；窗口位置与大小记忆（关闭自动保存、启动自动恢复）；**发布独立 exe 安装版/绿色版（PyInstaller 打包，含运行环境，无需目标机装 Python）；修复 Ping 黑框、添加主机 exists 表名报错、exe 无图标、按钮图片缺失、保存设置失败（数据目录改 %LOCALAPPDATA%）** |
 | 2.1.20260825 | 2026-08-25 | RDP 连接重构为 Windows 凭据管理器方式（自动写入/清除凭据，不再生成临时文件）；编辑主机三项修复（选中数据获取错误、主机名修改无效、纯数字 IP 类型错误）并新增输入校验；RDP/URL 补齐连接确认弹框；新增鼠标中键释放焦点；修复分组展开状态多层级记录失败；修复空分组不刷新列表；修复启动 -font 报错；界面颜色设置实时生效；分组图标更换为 folder/folder_badge_plus |
 | 2.0.20260824 | 2026-08-24 | 新增设置按钮与配置管理；新增 SSH/VNC 一键连接；SSH 工具支持 XTerminal/PuTTY/MobaXterm/FinalShell/Xshell；设置窗口居中；字体/颜色应用到列表；新增颜色选择器；新增恢复默认设置按钮；保存设置后立即动态生效；服务器树/分组树添加图标（Font Awesome 6.4.0 离线字体）；分组展开状态持久化；修复 17 个 Bug |
@@ -265,12 +266,12 @@ powershell -ExecutionPolicy Bypass -File .\build_release.ps1
 ### 产物
 | 文件 | 说明 | 体积（约） |
 |------|------|-----------|
-| `dist/ServerRemoteInfoManager-2.2.20260825-Setup.exe` | 安装版 | 14.8 MB |
-| `dist/ServerRemoteInfoManager-2.2.20260825-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
+| `dist/ServerRemoteInfoManager-3.0.20260827-Setup.exe` | 安装版 | 14.8 MB |
+| `dist/ServerRemoteInfoManager-3.0.20260827-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
 | `dist/ServerRemoteInfoManager.exe` | 单文件 exe（备用） | 23.5 MB |
 
 ### 发布到 GitHub Release
-- Tag：`v2.2.20260825`
+- Tag：`v3.0.20260827`
 - 上传上述两个发行包作为附件
 - Release notes 复用 `更新说明.txt` 本次更新内容
 

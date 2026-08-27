@@ -3,7 +3,7 @@
 # Usage: .\build_release.ps1  (run with: powershell -ExecutionPolicy Bypass -File .\build_release.ps1)
 
 $ErrorActionPreference = "Stop"
-$Version = "2.2.20260825"
+$Version = "3.0.20260827"
 
 Write-Host "== Clean old build/dist ==" -ForegroundColor Cyan
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue

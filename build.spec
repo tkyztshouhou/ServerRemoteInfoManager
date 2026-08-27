@@ -14,9 +14,11 @@ ONE_FILE = os.environ.get('PYI_ONEFILE', '0') == '1'
 hiddenimports = []
 hiddenimports += collect_submodules('tkinter')
 hiddenimports += collect_submodules('PIL')
+hiddenimports += collect_submodules('faq')
 hiddenimports += ['sqlite3','subprocess','threading','webbrowser','re',
                   'tempfile','os','sys','datetime','json','base64',
-                  'hashlib','shutil','pathlib']
+                  'hashlib','shutil','pathlib',
+                  'markdown','tkhtmlview']
 
 datas = [
     (os.path.join('img'), 'img'),
