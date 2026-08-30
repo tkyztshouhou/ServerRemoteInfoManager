@@ -13,10 +13,13 @@ class logs:
         if user_data_dir:
             self.log_path = os.path.join(user_data_dir, 'logs')
         else:
-            self.log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'logs')
+            # 未显式传入时回退到 %LOCALAPPDATA%/ServerRemoteInfoManager/logs，
+            # 避免落到 C:\Program Files\...（只读）导致 PermissionError（B74）
+            appdata = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+            self.log_path = os.path.join(appdata, 'ServerRemoteInfoManager', 'logs')
         # B25: 简化初始化逻辑，移除重复赋值和调试行
         if not os.path.exists(self.log_path):
-            os.makedirs(self.log_path)
+            os.makedirs(self.log_path, exist_ok=True)
         self.day = self.too.time_day()
         self.log_file_path = os.path.join(self.log_path, self.day + 'log.txt')
         # 确保日志文件存在

@@ -326,8 +326,9 @@ class Tool:
                 print(f"添加凭据失败，无法连接 {ip}:{port}")
                 return False
 
-            # 启动 mstsc 打开临时 .rdp（阻塞直到远程桌面会话关闭，隐藏控制台窗口避免黑框闪烁）
-            subprocess.call(['mstsc', tmp_rdp], **_hidden_console_kwargs())
+            # 启动 mstsc 打开临时 .rdp（阻塞直到远程桌面会话关闭）
+            # mstsc 是 GUI 程序，不能附加 STARTUPINFO(SW_HIDE)，否则远程桌面窗口会被隐藏
+            subprocess.call(['mstsc', tmp_rdp])
             return True
         except Exception as e:
             print(f"运行mstsc时出错: {e}")
@@ -440,7 +441,8 @@ class Tool:
 
             addr = f"{host}:{port}"
             cmd = ['vncviewer', addr]
-            self.thread_it(subprocess.Popen, cmd, **_hidden_console_kwargs())
+            # vncviewer 是 GUI 程序，不能附加 SW_HIDE（同 mstsc 的 B68 修正）
+            self.thread_it(subprocess.Popen, cmd)
             return True
         except Exception as e:
             # 提供更友好的错误信息
@@ -472,7 +474,8 @@ class Tool:
 
             # Radmin连接命令：radmin.exe /connect:地址:端口
             cmd = f'"{radmin_path}" /connect:{host}:{port}'
-            self.thread_it(subprocess.Popen, cmd, shell=True, **_hidden_console_kwargs())
+            # radmin.exe 是 GUI 程序，不能附加 SW_HIDE（同 mstsc 的 B68 修正）
+            self.thread_it(subprocess.Popen, cmd, shell=True)
             return True
         except Exception as e:
             # 提供更友好的错误信息

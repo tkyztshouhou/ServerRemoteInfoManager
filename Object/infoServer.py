@@ -14,6 +14,7 @@ import subprocess
 import platform
 import queue
 import re
+import sqlite3
 
 
 '''
@@ -1892,11 +1893,9 @@ class InfoServer:
                 return
             with open(file_path, 'r', encoding='utf-8') as f:
                 groups_data = json.load(f)
-            # 清空现有分组
-            self.db.clear_groups()
-            # 导入分组
-            for group in groups_data:
-                self.db.add_group(group['name'], group.get('parent_id'))
+            # 先 truncate 分组表并重置自增序列，再按导出 id 严格恢复，
+            # 避免与现有自增序列冲突导致 id 漂移（如导出 id=4 但当前序列已到 6）
+            self.db.import_group_replace(groups_data)
             # 刷新分组树
             self.init_groups_data()
             messagebox.showinfo('成功', '分组导入成功！')
@@ -1917,8 +1916,9 @@ class InfoServer:
             groups_data = cursor.fetchall()
             cursor.close()
             conn.close()
-            # 转换为列表
-            groups_list = [{'name': g[1], 'parent_id': g[2]} for g in groups_data]
+            # 转换为列表（保留 id 与 parent_id，导入时按 id 重建父子关系，
+            # 避免重新分配 id 导致 server.parent_id 错乱；B75）
+            groups_list = [{'id': g[0], 'name': g[1], 'parent_id': g[2]} for g in groups_data]
             # 保存文件
             file_path = filedialog.asksaveasfilename(
                 title='保存分组文件',
@@ -1950,23 +1950,11 @@ class InfoServer:
                 return
             with open(file_path, 'r', encoding='utf-8') as f:
                 servers_data = json.load(f)
-            # 清空现有服务器
-            self.db.clear_servers()
-            # 导入服务器（S1: add_server 自动加密明文密码；若导入的是本程序
-            # 导出的密文则原样保存，不会被二次加密）
-            for server in servers_data:
-                self.db.add_server(
-                    server['conn_type'],
-                    server['name'],
-                    server['host'],
-                    server['port'],
-                    server['username'],
-                    server['password'],
-                    server.get('parent_id'),
-                    server.get('server_info', '')
-                )
+            # 先 truncate 服务器表并重置自增序列（与分组导入一致），再严格按
+            # 导出 id 恢复，避免与现有自增序列冲突导致 id 漂移、parent_id 错乱
+            self.db.import_server_replace(servers_data)
             # 刷新服务器树
-            self.init_servers_data()
+            self.init_server_data()
             messagebox.showinfo('成功', '服务器导入成功！')
             self.log.write_log_info('服务器导入成功')
         except Exception as e:
@@ -1985,7 +1973,8 @@ class InfoServer:
             servers_data = cursor.fetchall()
             cursor.close()
             conn.close()
-            # 转换为列表（S1: 库中密码为密文，导出前解密为明文以便备份迁移）
+            # 转换为列表（S1: 库中 password 为 enc:v1: 密文，导出前解密为明文，
+            # 明文 JSON 便于跨机器/跨用户迁移；导入时 add_server 会按现状重新加密）
             servers_list = [
                 {
                     'conn_type': s[0],

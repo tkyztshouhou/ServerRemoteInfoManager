@@ -73,7 +73,17 @@
 | B64 | `infoServer.py:右侧功能区` | 远程桌面高级选项内容高度超出可用区域，出现轻微上下滚动 | ✅ 已修复：右侧改为上下结构（Ping+FAQ 同容器左右排列），高级选项区占满剩余高度，不再滚动 |
 | B65 | `infoServer.py:版本读取` | version.txt 为 UTF-8 编码的 VSVersionInfo 多行格式（含 © 字符），代码用默认 GBK 打开抛 `UnicodeDecodeError` 被 except 吞掉，窗口标题长期回退 fallback 旧版本号 | ✅ 已修复（2.2 版）：UTF-8 编码打开并用正则提取 `FileVersion` 字段，fallback 更新为 V2.2.20260825 |
 | B66 | `infoServer.py` | 顶部未 `import re`，`save_rdp_settings` 自定义分辨率校验 `re.match` 时抛 `NameError`（被 except 捕获提示"保存设置失败"），自定义分辨率无法保存 | ✅ 已修复（2.2 版）：顶部补充 `import re` |
-| B67 | `tool.py:run_mstsc` | 连接 RDP 时连续 `cmdkey` 调用（清理/写入/删除）弹出黑色命令行窗口并闪烁：程序以 GUI 方式打包（`console=False`），父进程无控制台，Windows 会为 `cmdkey.exe` 等控制台子系统程序自动新建控制台 | ✅ 已修复：新增 `_hidden_console_kwargs()`，为 Windows 下子进程附加 `CREATE_NO_WINDOW` + `STARTF_USESHOWWINDOW(SW_HIDE)`，并应用于 RDP 全流程的 `cmdkey`/`mstsc` 及 VNC/Radmin/SSH（`shell=True` 拉起 cmd）调用；PuTTY(plink) 为控制台程序，保持窗口可见 |
+| B67 | `tool.py:run_mstsc` | 连接 RDP 时连续 `cmdkey` 调用（清理/写入/删除）弹出黑色命令行窗口并闪烁：程序以 GUI 方式打包（`console=False`），父进程无控制台，Windows 会为 `cmdkey.exe` 等控制台子系统程序自动新建控制台 | ✅ 已修复：新增 `_hidden_console_kwargs()`，为 Windows 下**控制台**子进程（`cmdkey` 及 `shell=True` 拉起 cmd 的场景）附加 `CREATE_NO_WINDOW` + `STARTF_USESHOWWINDOW(SW_HIDE)`；**注意**：`SW_HIDE` 仅适用于控制台程序，GUI 程序（如 `mstsc`）误用会隐藏其主窗口（见 **B68**）；PuTTY(plink) 为控制台程序，保持窗口可见 |
+| B68 | `tool.py:_run_mstsc_with_credential` | **B67 回归**：`_hidden_console_kwargs()`（含 `STARTUPINFO.wShowWindow=SW_HIDE`）被错误应用到 `mstsc.exe`（GUI 程序），导致点击 RDP 连接后远程桌面窗口被整体隐藏、看似「打不开」 | ✅ 已修复（4.1.20260830）：启动 `mstsc` 时移除隐藏参数（`subprocess.call(['mstsc', tmp_rdp])`），仅保留 `cmdkey` 的隐藏参数，凭据清理/写入不再黑框闪烁，且远程桌面窗口正常显示 |
+| B69 | `gui_DA.py:set_setting` | **S1 加密重构回归**：`set_setting(key, value)` 内部 SQL 参数误写为未定义的 `stored`（`NameError`），导致所有「远程桌面高级选项」保存（启用剪贴板/全屏/映射驱动器/分辨率等）报错「保存设置失败: name 'stored' is not defined」 | ✅ 已修复（4.1.20260830）：将参数名改回 `value`，与 `add_server` 中 `stored_password` 的命名误用脱钩 |
+| B70 | `infoServer.py:export_group / export_server` | **S1 加密重构回归**：`export_server` 改写时直接 `sqlite3.connect(self.db.db)` 但文件顶部未 `import sqlite3`，导致「导出分组」「导出服务器」均报错「name 'sqlite3' is not defined」 | ✅ 已修复（4.2.20260830）：在 `Object/infoServer.py` 顶部补充 `import sqlite3` |
+| B71 | `infoServer.py:import_server` | **import/export 功能回归**：`import_server` 导入成功后刷新服务器树时误调用 `self.init_servers_data()`（该方法不存在，UI 层方法名为 `init_server_data`），报错 `InfoServer object has no attribute 'init_servers_data'` | ✅ 已修复（4.3.20260830）：改回正确的 `self.init_server_data()` |
+| B72 | `tool.py:_run_vnc_with_radmin` / `_run_vnc_viewer` | **B67 同类回归**：B67 修复 mstsc 时只改了 `run_mstsc`，但 `vncviewer` 与 `radmin.exe` 同为 GUI 程序，仍被 `_hidden_console_kwargs()`（SW_HIDE）隐藏，连接后窗口不出现 | ✅ 已修复（4.4.20260830）：移除两者的隐藏参数，仅 `cmdkey`/SSH-`cmd` 等控制台程序保留隐藏 |
+| B73 | `infoServer.py:export_server` / `import_server` | **数据损坏隐患（初版修复方向有误）**：初版改为「导出保留密文」仅适合同机同用户，跨机器/跨用户导入会解密失败导致密码置空 | ⚠️ 4.4 初版方案不适用跨机器；**4.5 修正为导出明文 + 导入重新加密**（见 **B76**） |
+| B74 | `tools/logs.py` / `gui_DA.py:25` | **安装到 Program Files 后启动崩溃**：`logs()` 在多处未传入 `user_data_dir`（`app.py`、`gui_DA.DataAccess`、`tool.py`、`opsbrain/da.py`、`faq/ui.py`），回退到 `程序目录/../logs`，只读目录写入触发 `PermissionError: [WinError 5] 拒绝访问`；`DataAccess.__init__` 同样 `logs()` 无目录 | ✅ 已修复（4.5.20260830）：`logs()` 未传 `user_data_dir` 时默认回退到 `%LOCALAPPDATA%/ServerRemoteInfoManager/logs`，彻底避开 Program Files 只读目录 |
+| B75 | `infoServer.py:export_group` | **分组导出缺少 id**：仅导出 `name`/`parent_id`，导入时重新分配 id，导致 `server.parent_id` 指向错乱 | ✅ 已修复（4.5.20260830）：导出保留 `id` 与 `parent_id`，导入时按 id 重建父子关系 |
+| B76 | `infoServer.py:export_server` | **跨机器迁移密码丢失**：B73 初版导出密文，换机器/换用户后 DPAPI/Fernet 无法解密、密码置空 | ✅ 已修复（4.5.20260830）：`export_server` 解密为明文写入 JSON（保留安全确认弹窗），`import_server` 经 `add_server` 在目标机重新加密，跨机器/跨用户迁移正常 |
+| B77 | `infoServer.py:import_group` / `import_server` | **导入 id 漂移**：分组表/服务器表使用 `AUTOINCREMENT`，导入时按导出 id 显式插入却未重置 `sqlite_sequence`，导致新序列与现有 max id 冲突（如导出 id=4 但当前序列已到 6，导入后新增分组拿到 id=6 与导出错乱、server.parent_id 指向错误） | ✅ 已修复（4.6.20260830）：新增 `import_group_replace` / `import_server_replace`，导入前 `DELETE` 全表并 `DELETE FROM sqlite_sequence WHERE name=...` 重置自增序列，再严格按导出 id 恢复，后续自动新增 id 紧接其后无漂移 |
 | F3 | `infoServer.py:820-847` | Radmin 连接类型无对应分支 | ✅ 已修复：添加 run_radmin 方法并在 connect_server 中添加 Radmin 分支 |
 | S1 | `infoServer.py:935` | 密码明文存储及日志泄露 | ✅ 已修复：对密码进行脱敏处理，避免日志中明文记录密码 |
 | S2 | `infoServer.py:945` | 密码修改操作明文记录密码 | ✅ 已修复：对修改后的密码进行脱敏处理 |
@@ -160,6 +170,54 @@
 - `更新说明.txt`：新增「★ 4.0.20260831 更新」块（运维智脑对话窗口新增滚动条 + 修复滚轮翻页失效、上下文记忆核查确认已生效），顶部版本/日期更新
 - `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.0.20260831`；运维智脑章节补充「多轮上下文记忆」「对话窗口可滚动」说明；功能清单新增 **F19**（对话窗口滚动修复）、**F20**（上下文记忆确认正常）
 - 关联条目：运维智脑对话窗口滚动修复见 **F19**，多轮上下文记忆确认见 **F20**（均仅涉及 `opsbrain/ui.py` 与既有 `service.py`，无功能回归）
+
+### 6. 4.1.20260830 版本号更新（本轮 hotfix）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 1, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.1.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.1.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.1.20260830`
+- `更新说明.txt`：新增「★ 4.1.20260830 更新」块（RDP 远程桌面窗口隐藏回归修复、远程桌面高级选项保存报错回归修复），顶部版本/日期更新
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.1.20260830`；功能清单新增 **B68**（mstsc 误用 SW_HIDE）、**B69**（set_setting 变量名笔误）
+- 关联条目：RDP 窗口隐藏回归修复见 **B68**（`tools/tool.py` 移除 mstsc 的隐藏参数），高级选项保存报错修复见 **B69**（`Object/gui_DA.py:set_setting` 参数名 `stored`→`value`）
+
+### 7. 4.2.20260830 版本号更新（本轮 hotfix）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 2, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.2.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.2.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.2.20260830`
+- `更新说明.txt`：新增「★ 4.2.20260830 更新」块（导出分组/服务器 `name 'sqlite3' is not defined` 回归修复），顶部版本/日期更新
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.2.20260830`；功能清单新增 **B70**（sqlite3 缺失导入）
+- 关联条目：导出功能 `NameError` 修复见 **B70**（`Object/infoServer.py` 顶部补充 `import sqlite3`）；此前 hotfix 见 **B68**/**B69**（4.1.20260830）
+
+### 8. 4.3.20260830 版本号更新（本轮 hotfix）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 3, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.3.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.3.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.3.20260830`
+- `更新说明.txt`：新增「★ 4.3.20260830 更新」块（导入服务器 `init_servers_data` 方法名笔误导致 `AttributeError` 修复），顶部版本/日期更新
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.3.20260830`；功能清单新增 **B71**（导入服务器刷新调用 `init_server_data`）
+- 关联条目：导入服务器 `AttributeError` 修复见 **B71**（`Object/infoServer.py:import_server` 调用 `init_server_data()` 而非 `init_servers_data()`）
+
+### 9. 4.4.20260830 版本号更新（本轮 hotfix，全量自查修复）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 4, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.4.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.4.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.4.20260830`
+- `更新说明.txt`：新增「★ 4.4.20260830 更新」块（VNC/Radmin 连接窗口被 SW_HIDE 隐藏修复、服务器导入二次加密损坏修复），顶部版本/日期更新
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.4.20260830`；功能清单确认 **B72**（VNC/Radmin 隐藏参数）、**B73**（导入二次加密）已修复
+- 关联条目：VNC/Radmin 窗口隐藏回归修复见 **B72**（`tools/tool.py` 移除 vncviewer/radmin 的隐藏参数）；导入二次加密数据损坏修复见 **B73**（`Object/infoServer.py:export_server` 保留库中密文）
+
+### 10. 4.5.20260830 版本号更新（本轮 hotfix）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 5, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.5.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.5.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.5.20260830`
+- `更新说明.txt`：新增「★ 4.5.20260830 更新」块（安装到 Program Files 启动 PermissionError、分组导出缺 id、导出密码改为明文便于跨机器迁移）
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.5.20260830`；功能清单新增 **B74**（日志目录回退 LOCALAPPDATA）、**B75**（分组导出 id）、**B76**（导出明文密码）
+- 关联条目：Program Files 启动崩溃修复见 **B74**（`tools/logs.py` 默认回退 `%LOCALAPPDATA%`）；分组导出 id 修复见 **B75**（`export_group` 保留 id）；导出明文密码见 **B76**（`export_server` 解密明文、导入重新加密）
+
+### 11. 4.6.20260830 版本号更新（本轮 hotfix）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 6, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.6.20260830`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.6.20260830`
+- `build_release.ps1`：`$Version` 同步为 `4.6.20260830`
+- `更新说明.txt`：新增「★ 4.6.20260830 更新」块（导入分组/服务器 id 漂移修复：先 truncate 并重置自增序列，再按导出 id 恢复）
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.6.20260830`；功能清单新增 **B77**（导入 id 漂移）
+- 关联条目：导入 id 漂移修复见 **B77**（`gui_DA.py` 新增 `import_group_replace`/`import_server_replace`，`infoServer.py` 改用之）
 
 ---
 

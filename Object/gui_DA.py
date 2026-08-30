@@ -134,7 +134,7 @@ class DataAccess:
     def set_setting(self, key, value):
         try:
             with self._connect() as (conn, cursor):
-                cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, stored))
+                cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
                 conn.commit()
                 return True
         except sqlite3.Error as e:
@@ -233,6 +233,35 @@ class DataAccess:
             cursor.execute('INSERT INTO servers (conn_type, name, host, port, username, password, parent_id, server_info) VALUES (?, ?, ?, ?, ?, ?, ?,?)', (conn_type, name, host, port, username, stored_password, parent_id, server_info))
             conn.commit()
             return cursor.lastrowid
+
+    # 分组：先 truncate 再按导出 id 导入（重置自增序列，消除 id 漂移）
+    def import_group_replace(self, groups_data):
+        with self._connect() as (conn, cursor):
+            cursor.execute('DELETE FROM groups')
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='groups'")
+            for g in groups_data:
+                cursor.execute(
+                    'INSERT INTO groups (id, name, parent_id) VALUES (?, ?, ?)',
+                    (g.get('id'), g.get('name'), g.get('parent_id'))
+                )
+            conn.commit()
+
+    # 服务器：先 truncate 再按导出 id 导入（重置自增序列，消除 id 漂移）
+    def import_server_replace(self, servers_data):
+        with self._connect() as (conn, cursor):
+            cursor.execute('DELETE FROM servers')
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='servers'")
+            for s in servers_data:
+                # S1: 密码加密后入库（已是密文格式的值不会被二次加密）
+                stored_password = encrypt_secret(s.get('password'))
+                cursor.execute(
+                    'INSERT INTO servers (id, conn_type, name, host, port, username, password, parent_id, server_info) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (s.get('id'), s.get('conn_type'), s.get('name'), s.get('host'),
+                     s.get('port'), s.get('username'), stored_password,
+                     s.get('parent_id'), s.get('server_info', ''))
+                )
+            conn.commit()
 
     # 添加组
     def add_group(self, name, parent_id):

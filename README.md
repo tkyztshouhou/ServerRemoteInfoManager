@@ -76,19 +76,19 @@
 ## 环境要求
 
 - **已发布版本（推荐）**：Windows 10 / 11 64 位，无需安装 Python 或任何依赖
-  - 安装版：`ServerRemoteInfoManager-4.0.20260831-Setup.exe`
-  - 绿色版：`ServerRemoteInfoManager-4.0.20260831-Portable.rar`（解压即用）
+  - 安装版：`ServerRemoteInfoManager-4.6.20260830-Setup.exe`
+  - 绿色版：`ServerRemoteInfoManager-4.6.20260830-Portable.rar`（解压即用）
 - **源码运行**：Python 3.10.11 + `tkinter`（标准库）、`Pillow`，Windows 操作系统
 
 ## 安装步骤
 
 ### 方式一：安装版（推荐）
-1. 双击 `ServerRemoteInfoManager-4.0.20260831-Setup.exe`
+1. 双击 `ServerRemoteInfoManager-4.6.20260830-Setup.exe`
 2. 按向导安装（默认安装到 `C:\Program Files\ServerRemoteInfoManager\`）
 3. 安装完成后从开始菜单或桌面快捷方式启动
 
 ### 方式二：绿色版
-1. 解压 `ServerRemoteInfoManager-4.0.20260831-Portable.rar`
+1. 解压 `ServerRemoteInfoManager-4.6.20260830-Portable.rar`
 2. 双击 `ServerRemoteInfoManager.exe` 直接运行，无需安装
 
 ### 方式三：源码运行
@@ -282,12 +282,12 @@ powershell -ExecutionPolicy Bypass -File .\build_release.ps1
 ### 产物
 | 文件 | 说明 | 体积（约） |
 |------|------|-----------|
-| `dist/ServerRemoteInfoManager-4.0.20260831-Setup.exe` | 安装版 | 14.8 MB |
-| `dist/ServerRemoteInfoManager-4.0.20260831-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
+| `dist/ServerRemoteInfoManager-4.6.20260830-Setup.exe` | 安装版 | 14.8 MB |
+| `dist/ServerRemoteInfoManager-4.6.20260830-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
 | `dist/ServerRemoteInfoManager.exe` | 单文件 exe（备用） | 23.5 MB |
 
 ### 发布到 GitHub Release
-- Tag：`v4.0.20260831`
+- Tag：`v4.6.20260830`
 - 上传上述两个发行包作为附件
 - Release notes 复用 `更新说明.txt` 本次更新内容
 
