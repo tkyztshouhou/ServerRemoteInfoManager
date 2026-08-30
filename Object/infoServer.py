@@ -7,6 +7,7 @@ from tkinter import colorchooser
 from Object.gui_DA import DataAccess
 from tools.logs import logs
 from tools.tool import Tool
+from tools.secret import decrypt as secret_decrypt, mask as secret_mask
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 import threading
 import subprocess
@@ -102,8 +103,9 @@ class InfoServer:
         # 绑定窗口关闭事件，保存窗口位置
         self.master.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # F15: 清理可能残留的 RDP 凭据
+        # F15/S6: 清理可能残留的 RDP 孤儿凭据与临时 .rdp 文件
         self.too.cleanup_rdp_credentials()
+        self.too.cleanup_temp_rdp_files()
 
         self.log.write_log_info("程序初始化成功")
 
@@ -352,7 +354,21 @@ class InfoServer:
                                     width=15, height=2, bg='#4CAF50', fg='white')
             self.faq_btn.pack(side=tk.RIGHT, padx=(10, 25))
             self.log.write_log_error(f'FAQ图片加载失败: {e}')
-        
+
+        # 运维智脑入口按钮容器（位于 Ping/FAQ 按钮下方，独占一行，左对齐）
+        self.ops_btn_container = tk.Frame(self.right_container, bg='#F0F0F0')
+        self.ops_btn_container.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        try:
+            self.ops_image = tk.PhotoImage(file=os.path.join(self._img_dir, 'btn-ywzn.png'))
+            self.ops_btn = tk.Button(self.ops_btn_container, image=self.ops_image, command=self.show_ops_brain,
+                                     width=191, height=45, borderwidth=0, bg='#F0F0F0', activebackground='#F0F0F0')
+            self.ops_btn.pack(side=tk.LEFT, padx=(25, 10))
+        except Exception as e:
+            self.ops_btn = tk.Button(self.ops_btn_container, text="运维智脑", width=15, height=2,
+                                     command=self.show_ops_brain, bg='#9C27B0', fg='white')
+            self.ops_btn.pack(side=tk.LEFT, padx=(25, 10))
+            self.log.write_log_error(f'运维智脑图片加载失败: {e}')
+
         # 右侧：下方 - 远程桌面高级选项（占满剩余全部高度，不再需要滚动）
         self.rdp_frame = tk.Frame(self.right_container, bg='#F0F0F0')
         self.rdp_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=5)
@@ -654,7 +670,7 @@ class InfoServer:
             # 保持新容器区域为中性灰背景，不跟随全局背景色变化：
             # 左侧服务器说明区、右侧配置区及其内部容器/标题标签均固定 #F0F0F0
             for _w in (self.new_container, self.left_container, self.right_container,
-                       self.top_btn_container, self.rdp_frame, self.rdp_inner):
+                       self.top_btn_container, self.ops_btn_container, self.rdp_frame, self.rdp_inner):
                 try:
                     _w.configure(bg='#F0F0F0')
                 except Exception:
@@ -775,8 +791,7 @@ class InfoServer:
         except Exception as e:
             self.log.write_log_error('刷新Entry组件失败: ' + str(e))
 
-    def apply_all_settings(self, ssh_tool_type, ssh_paths, vnc_path, default_user, default_pass,
-                           ssh_port, vnc_port, font_name, font_size, bg_color,
+    def apply_all_settings(self, ssh_tool_type, ssh_paths, vnc_path, font_name, font_size, bg_color,
                            font_color, info_bg_color, search_bg_color,
                            server_info_font_size=None, server_info_font_color=None):
         """保存并立即应用所有设置（含界面样式）"""
@@ -785,10 +800,6 @@ class InfoServer:
         for tool_type, path in ssh_paths.items():
             self.db.set_setting(f'ssh_tool_path_{tool_type}', path)
         self.db.set_setting('vnc_tool_path', vnc_path)
-        self.db.set_setting('default_username', default_user)
-        self.db.set_setting('default_password', default_pass)
-        self.db.set_setting('default_ssh_port', ssh_port)
-        self.db.set_setting('default_vnc_port', vnc_port)
         self.db.set_setting('ui_font', font_name)
         self.db.set_setting('ui_font_size', font_size)
         self.db.set_setting('ui_bg_color', bg_color)
@@ -825,10 +836,6 @@ class InfoServer:
                 'xshell': entry_ssh_xshell.get(),
             }
             vnc_path = entry_vnc_path.get()
-            default_user = entry_default_user.get()
-            default_pass = entry_default_pass.get()
-            ssh_port = entry_ssh_port.get()
-            vnc_port = entry_vnc_port.get()
             font_name = combo_font.get()
             font_size = combo_font_size.get()
             bg_color = entry_bg_color.get()
@@ -840,8 +847,7 @@ class InfoServer:
             server_info_font_color = entry_server_info_font_color.get().strip()
             preview_label.configure(bg=bg_color)
 
-            self.apply_all_settings(ssh_tool_type, ssh_paths, vnc_path, default_user, default_pass,
-                                    ssh_port, vnc_port, font_name, font_size, bg_color,
+            self.apply_all_settings(ssh_tool_type, ssh_paths, vnc_path, font_name, font_size, bg_color,
                                     font_color, info_bg_color, search_bg_color,
                                     server_info_font_size=server_info_font_size or None,
                                     server_info_font_color=server_info_font_color or None)
@@ -860,10 +866,6 @@ class InfoServer:
                 'ssh_tool_path_finalshell': 'finalshell.exe',
                 'ssh_tool_path_xshell': 'Xshell.exe',
                 'vnc_tool_path': 'vncviewer',
-                'default_username': '',
-                'default_password': '',
-                'default_ssh_port': '22',
-                'default_vnc_port': '5900',
                 'ui_font': 'Microsoft YaHei',
                 'ui_font_size': '10',
                 'ui_bg_color': '#F0F0F0',
@@ -890,12 +892,6 @@ class InfoServer:
             entry_ssh_xshell.insert(0, 'Xshell.exe')
             entry_vnc_path.delete(0, tk.END)
             entry_vnc_path.insert(0, 'vncviewer')
-            entry_default_user.delete(0, tk.END)
-            entry_default_pass.delete(0, tk.END)
-            entry_ssh_port.delete(0, tk.END)
-            entry_ssh_port.insert(0, '22')
-            entry_vnc_port.delete(0, tk.END)
-            entry_vnc_port.insert(0, '5900')
             combo_font.set('Microsoft YaHei')
             combo_font_size.set('10')
             entry_bg_color.delete(0, tk.END)
@@ -924,12 +920,12 @@ class InfoServer:
 
         settings_win = tk.Toplevel(self.master)
         settings_win.title('系统设置')
-        settings_win.geometry('400x650')
+        settings_win.geometry('800x650')
         settings_win.configure(bg='#F0F0F0')
         settings_win.transient(self.master)
         settings_win.grab_set()
-        # 居中定位（宽度400，高度650）
-        self.top_master(settings_win, 650, 400)
+        # 居中定位（宽度800，高度650）—— 连接参数窗口宽度较原先扩大一倍
+        self.top_master(settings_win, 650, 800)
 
         notebook = ttk.Notebook(settings_win)
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -982,21 +978,10 @@ class InfoServer:
                                    command=lambda: _browse_path(entry_vnc_path))
         btn_vnc_browse.place(x=330, y=322)
 
-        # Tab 2: 连接参数
+        # Tab 2: AI 模型配置（运维智脑）
         tab2 = tk.Frame(notebook, bg='#F0F0F0')
         notebook.add(tab2, text='连接参数')
-        tk.Label(tab2, text='默认用户名：', bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=20, y=30)
-        entry_default_user = tk.Entry(tab2, width=35, font=('Microsoft YaHei', 10))
-        entry_default_user.place(x=20, y=55)
-        tk.Label(tab2, text='默认密码：', bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=20, y=90)
-        entry_default_pass = tk.Entry(tab2, width=35, show='*', font=('Microsoft YaHei', 10))
-        entry_default_pass.place(x=20, y=115)
-        tk.Label(tab2, text='默认 SSH 端口：', bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=20, y=150)
-        entry_ssh_port = tk.Entry(tab2, width=15, font=('Microsoft YaHei', 10))
-        entry_ssh_port.place(x=20, y=175)
-        tk.Label(tab2, text='默认 VNC 端口：', bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=20, y=210)
-        entry_vnc_port = tk.Entry(tab2, width=15, font=('Microsoft YaHei', 10))
-        entry_vnc_port.place(x=20, y=235)
+        self._build_model_config_tab(tab2)
 
         # Tab 3: 界面设置
         tab3 = tk.Frame(notebook, bg='#F0F0F0')
@@ -1082,10 +1067,6 @@ class InfoServer:
         entry_ssh_finalshell.insert(0, self.db.get_setting('ssh_tool_path_finalshell', 'finalshell.exe'))
         entry_ssh_xshell.insert(0, self.db.get_setting('ssh_tool_path_xshell', 'Xshell.exe'))
         entry_vnc_path.insert(0, self.db.get_setting('vnc_tool_path', 'vncviewer'))
-        entry_default_user.insert(0, self.db.get_setting('default_username', ''))
-        entry_default_pass.insert(0, self.db.get_setting('default_password', ''))
-        entry_ssh_port.insert(0, self.db.get_setting('default_ssh_port', '22'))
-        entry_vnc_port.insert(0, self.db.get_setting('default_vnc_port', '5900'))
         combo_font.set(self.db.get_setting('ui_font', 'Microsoft YaHei'))
         combo_font_size.set(self.db.get_setting('ui_font_size', '10'))
         entry_bg_color.insert(0, self.db.get_setting('ui_bg_color', '#F0F0F0'))
@@ -1131,6 +1112,213 @@ class InfoServer:
                 entry.insert(0, result[1])
                 preview.configure(bg=result[1])
 
+    def _build_model_config_tab(self, parent):
+        """构建「连接参数」Tab 内的 AI 模型配置界面（运维智脑）。"""
+        from opsbrain.service import ModelService, mask_key
+        from opsbrain.da import ModelDAO
+
+        # 模型 DAO 与业务服务（主库）
+        model_dao = ModelDAO(self.db_path)
+        model_dao.ensure_schema()
+        model_svc = ModelService(model_dao)
+
+        # 当前选中的模型 id（编辑态），None 表示新增
+        self._mc_selected_id = None
+
+        # ---- 顶部标题 ----
+        tk.Label(parent, text='AI 模型配置', bg='#F0F0F0',
+                 font=('Microsoft YaHei', 13, 'bold'), fg='#9C27B0').place(x=15, y=12)
+        tk.Label(parent, text='配置后可在「运维智脑」中选择模型进行对话',
+                 bg='#F0F0F0', font=('Microsoft YaHei', 9), fg='#888888').place(x=15, y=38)
+
+        # ---- 左侧模型列表 ----
+        list_frame = tk.Frame(parent, bg='#FFFFFF', relief='solid', bd=1)
+        list_frame.place(x=15, y=65, width=300, height=470)
+        tk.Label(list_frame, text='模型列表', bg='#FFFFFF',
+                 font=('Microsoft YaHei', 10, 'bold')).pack(anchor='w', padx=8, pady=6)
+        list_box = tk.Listbox(list_frame, font=('Microsoft YaHei', 10),
+                              bg='#FFFFFF', relief='flat', activestyle='none',
+                              selectbackground='#E1BEE7', selectforeground='#4A148C')
+        list_box.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+        scroll = tk.Scrollbar(list_box, orient=tk.VERTICAL, command=list_box.yview)
+        list_box.config(yscrollcommand=scroll.set)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # ---- 右侧参数表单 ----
+        form = tk.Frame(parent, bg='#F0F0F0')
+        form.place(x=330, y=65, width=440, height=470)
+
+        labels = ['名称（显示名）:', 'API 地址:', '模型名称（API）:', '密钥:',
+                  'temperature:', 'max_tokens:']
+        entries = {}
+        y = 10
+        for i, lab in enumerate(labels):
+            tk.Label(form, text=lab, bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=0, y=y)
+            e = tk.Entry(form, width=40, font=('Microsoft YaHei', 10))
+            e.place(x=140, y=y)
+            entries[lab] = e
+            y += 42
+        # 描述单独放置，给「启用流式输出 / 启用该模型」复选框留出空间
+        tk.Label(form, text='描述:', bg='#F0F0F0', font=('Microsoft YaHei', 10)).place(x=0, y=300)
+        e = tk.Entry(form, width=56, font=('Microsoft YaHei', 10))
+        e.place(x=140, y=300)
+        entries['描述:'] = e
+
+        # 密钥（始终以掩码显示，不提供明文切换）
+        key_entry = entries['密钥:']
+        key_entry.config(show='*')
+
+        # 密钥遮蔽预览
+        lbl_key_mask = tk.Label(form, text='', bg='#F0F0F0', fg='#888888',
+                                font=('Microsoft YaHei', 9))
+        lbl_key_mask.place(x=140, y=215)
+
+        # 复选框
+        var_stream = tk.BooleanVar(value=True)
+        var_enabled = tk.BooleanVar(value=True)
+        tk.Checkbutton(form, text='启用流式输出', bg='#F0F0F0', font=('Microsoft YaHei', 10),
+                       variable=var_stream).place(x=140, y=250)
+        tk.Checkbutton(form, text='启用该模型', bg='#F0F0F0', font=('Microsoft YaHei', 10),
+                       variable=var_enabled).place(x=280, y=250)
+
+        # ---- 列表操作按钮 ----
+        def refresh_list(select_id=None):
+            list_box.delete(0, tk.END)
+            models = model_svc.list_models()
+            for m in models:
+                label = '%s (%s)' % (m['name'], m['model_name'])
+                if not m['enabled']:
+                    label += ' [停用]'
+                list_box.insert(tk.END, label)
+            if select_id is not None:
+                for idx, m in enumerate(models):
+                    if m['id'] == select_id:
+                        list_box.selection_set(idx)
+                        list_box.see(idx)
+                        break
+
+        def clear_form():
+            self._mc_selected_id = None
+            for e in entries.values():
+                e.delete(0, tk.END)
+            var_stream.set(True)
+            var_enabled.set(True)
+            lbl_key_mask.config(text='')
+
+        def load_to_form(mid):
+            m = model_svc.get_model(mid)
+            if not m:
+                return
+            self._mc_selected_id = mid
+            mapping = {
+                '名称（显示名）:': m['name'],
+                'API 地址:': m['api_url'],
+                '模型名称（API）:': m['model_name'],
+                '密钥:': m.get('api_key') or '',
+                'temperature:': str(m['temperature']),
+                'max_tokens:': str(m['max_tokens']),
+                '描述:': m.get('description') or '',
+            }
+            for k, v in mapping.items():
+                entries[k].delete(0, tk.END)
+                entries[k].insert(0, v)
+            var_stream.set(m['supports_stream'])
+            var_enabled.set(m['enabled'])
+            lbl_key_mask.config(text='当前密钥：' + m['api_key_masked'])
+
+        def on_select(event):
+            sel = list_box.curselection()
+            if not sel:
+                return
+            models = model_svc.list_models()
+            if sel[0] < len(models):
+                load_to_form(models[sel[0]]['id'])
+
+        list_box.bind('<<ListboxSelect>>', on_select)
+
+        def collect_form():
+            raw_key = key_entry.get()
+            # 若密钥框为口令遮盖态且未改动（框内为空），保留原密文
+            if raw_key == '' and self._mc_selected_id is not None:
+                old = model_svc.get_model(self._mc_selected_id)
+                raw_key = old['api_key'] if old else None
+            data = {
+                'name': entries['名称（显示名）:'].get().strip(),
+                'api_url': entries['API 地址:'].get().strip(),
+                'model_name': entries['模型名称（API）:'].get().strip(),
+                'api_key': raw_key,
+                'temperature': entries['temperature:'].get().strip() or '0.7',
+                'max_tokens': entries['max_tokens:'].get().strip() or '4096',
+                'description': entries['描述:'].get().strip(),
+                'supports_stream': var_stream.get(),
+                'enabled': var_enabled.get(),
+            }
+            return data
+
+        def on_save():
+            data = collect_form()
+            ok, msg = ModelService.validate(data)
+            if not ok:
+                messagebox.showwarning('校验失败', msg)
+                return
+            model_svc.save_model(data, self._mc_selected_id)
+            refresh_list(self._mc_selected_id)
+            messagebox.showinfo('提示', '模型已保存')
+
+        def on_new():
+            clear_form()
+
+        def on_delete():
+            sel = list_box.curselection()
+            if not sel:
+                messagebox.showinfo('提示', '请先选择要删除的模型')
+                return
+            models = model_svc.list_models()
+            if sel[0] >= len(models):
+                return
+            mid = models[sel[0]]['id']
+            if not messagebox.askyesno('确认', '确定删除该模型配置？'):
+                return
+            model_svc.delete_model(mid)
+            clear_form()
+            refresh_list()
+
+        def on_move(delta):
+            sel = list_box.curselection()
+            if not sel:
+                return
+            models = model_svc.list_models()
+            idx = sel[0]
+            target = idx + delta
+            if target < 0 or target >= len(models):
+                return
+            ordered = [m['id'] for m in models]
+            ordered[idx], ordered[target] = ordered[target], ordered[idx]
+            model_svc.reorder(ordered)
+            refresh_list(ordered[target])
+
+        # 列表下方操作按钮
+        btn_row = tk.Frame(parent, bg='#F0F0F0')
+        btn_row.place(x=15, y=545, width=300, height=30)
+        tk.Button(btn_row, text='新增', width=8, bg='#9C27B0', fg='white',
+                  font=('Microsoft YaHei', 9), command=on_new).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text='删除', width=8, bg='#F44336', fg='white',
+                  font=('Microsoft YaHei', 9), command=on_delete).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text='上移', width=8, bg='#757575', fg='white',
+                  font=('Microsoft YaHei', 9), command=lambda: on_move(-1)).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text='下移', width=8, bg='#757575', fg='white',
+                  font=('Microsoft YaHei', 9), command=lambda: on_move(1)).pack(side=tk.LEFT, padx=2)
+
+        # 右侧保存/取消
+        form_btn = tk.Frame(form, bg='#F0F0F0')
+        form_btn.place(x=140, y=420)
+        tk.Button(form_btn, text='保存', width=12, bg='#4CAF50', fg='white',
+                  font=('Microsoft YaHei', 10), command=on_save).pack(side=tk.LEFT, padx=5)
+        tk.Button(form_btn, text='清空', width=12, bg='#f0f0f0',
+                  font=('Microsoft YaHei', 10), command=clear_form).pack(side=tk.LEFT, padx=5)
+
+        refresh_list()
+
     # 添加主机window
     def add_server_window(self):
         def add_server_entry():
@@ -1174,8 +1362,9 @@ class InfoServer:
                 self.init_server_data()
                 # self.top.destroy()
                 messagebox.showinfo('提示', '添加成功')
+                # S4: 日志中密码脱敏，避免明文落盘
                 self.log.write_log_info('服务器：主机名:'+ name +'，ip地址：'+ host+ ',端口:'+ port+ 
-                                        '，用户名：' + username+ ',密码：'+ password + ',说明： '+ server_info+ '添加成功' )
+                                        '，用户名：' + username+ ',密码：'+ secret_mask(password) + ',说明： '+ server_info+ '添加成功' )
 
             except Exception as e:
                 self.log.write_log_error('服务器添加失败' + str(e))
@@ -1763,7 +1952,8 @@ class InfoServer:
                 servers_data = json.load(f)
             # 清空现有服务器
             self.db.clear_servers()
-            # 导入服务器
+            # 导入服务器（S1: add_server 自动加密明文密码；若导入的是本程序
+            # 导出的密文则原样保存，不会被二次加密）
             for server in servers_data:
                 self.db.add_server(
                     server['conn_type'],
@@ -1795,7 +1985,7 @@ class InfoServer:
             servers_data = cursor.fetchall()
             cursor.close()
             conn.close()
-            # 转换为列表
+            # 转换为列表（S1: 库中密码为密文，导出前解密为明文以便备份迁移）
             servers_list = [
                 {
                     'conn_type': s[0],
@@ -1803,7 +1993,7 @@ class InfoServer:
                     'host': s[2],
                     'port': s[3],
                     'username': s[4],
-                    'password': s[5],
+                    'password': secret_decrypt(s[5]),
                     'parent_id': s[6],
                     'server_info': s[7]
                 }
@@ -1817,6 +2007,13 @@ class InfoServer:
                 initialfile='servers_export.json'
             )
             if not file_path:
+                return
+            # S1: 导出文件包含明文密码，写入前二次确认风险
+            if not messagebox.askyesno(
+                    '安全提示',
+                    '即将导出的 JSON 文件包含所有主机的明文密码。\n\n'
+                    '请确认导出用途，妥善保管并及时删除该文件。\n\n是否继续导出？'):
+                self.log.write_log_info('用户取消导出服务器数据（明文密码风险确认）')
                 return
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(servers_list, f, ensure_ascii=False, indent=4)
@@ -2147,7 +2344,17 @@ class InfoServer:
             self.log.write_log_error('打开 FAQ 知识库失败: ' + str(e))
             messagebox.showerror('错误', 'FAQ 知识库打开失败：' + str(e))
         self.log.write_log_info('用户点击了FAQ知识库按钮')
-    
+
+    def show_ops_brain(self):
+        """打开运维智脑（独立多线程 AI 聊天窗口）"""
+        try:
+            from opsbrain.main import open_ops_brain
+            open_ops_brain(self.master)
+        except Exception as e:
+            self.log.write_log_error('打开运维智脑失败: ' + str(e))
+            messagebox.showerror('错误', '运维智脑打开失败：' + str(e))
+        self.log.write_log_info('用户点击了运维智脑按钮')
+
     # 创建远程桌面高级选项UI
     def create_rdp_options_ui(self):
         """创建远程桌面高级选项UI容器（网格布局，一行多个选项）"""

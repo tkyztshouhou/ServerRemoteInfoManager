@@ -7,6 +7,17 @@
 import sqlite3
 from contextlib import contextmanager
 from tools.logs import logs
+from tools.secret import (backend_name as secret_backend,
+                          decrypt as decrypt_secret,
+                          encrypt as encrypt_secret,
+                          is_available as secret_available,
+                          is_encrypted as secret_is_encrypted)
+
+# S3: 允许拼接进 SQL 的表名白名单（表名无法参数化，只能白名单校验）
+ALLOWED_TABLES = ('servers', 'groups')
+# S3: servers 表允许的更新列名白名单（update_server 的列名无法参数化，只能白名单校验）
+SERVER_COLUMNS = ('conn_type', 'name', 'host', 'port', 'username',
+                  'password', 'parent_id', 'server_info')
 
 class DataAccess:
     def __init__(self, db_path):
@@ -57,10 +68,6 @@ class DataAccess:
                     ('ssh_tool_path_finalshell', 'finalshell.exe'),
                     ('ssh_tool_path_xshell', 'Xshell.exe'),
                     ('vnc_tool_path', 'vncviewer'),
-                    ('default_username', ''),
-                    ('default_password', ''),
-                    ('default_ssh_port', '22'),
-                    ('default_vnc_port', '5900'),
                     ('ui_font', 'Microsoft YaHei'),
                     ('ui_font_size', '10'),
                     ('ui_bg_color', '#F0F0F0'),
@@ -79,13 +86,46 @@ class DataAccess:
         except sqlite3.Error as e:
             self.log.write_log_error("数据库初始化失败" + str(e))
 
+        # S1: 数据库就绪后，将历史遗留的明文密码一次性加密入库
+        try:
+            self.migrate_plaintext_secrets()
+        except Exception as e:
+            self.log.write_log_error('明文密码迁移失败: ' + str(e))
+
+    # S1: 历史明文密码迁移（幂等；settings.secret_encryption_migrated 作为标记）
+    def migrate_plaintext_secrets(self):
+        if not secret_available():
+            self.log.write_log_error('无可用加密后端（' + secret_backend() +
+                                     '），跳过明文密码迁移，密码仍以明文存储')
+            return 0
+        if self.get_setting('secret_encryption_migrated') == '1':
+            return 0
+        migrated = 0
+        try:
+            with self._connect() as (conn, cursor):
+                cursor.execute('SELECT id, password FROM servers')
+                for row_id, password in cursor.fetchall():
+                    if password and not secret_is_encrypted(password):
+                        cursor.execute('UPDATE servers SET password = ? WHERE id = ?',
+                                       (encrypt_secret(password), row_id))
+                        migrated += 1
+                conn.commit()
+        except sqlite3.Error as e:
+            self.log.write_log_error('明文密码迁移中断: ' + str(e))
+            return migrated
+        if self.set_setting('secret_encryption_migrated', '1'):
+            self.log.write_log_info(f'明文密码迁移完成，共加密 {migrated} 条记录'
+                                    f'（后端: {secret_backend()}）')
+        return migrated
+
     # 获取设置值
     def get_setting(self, key, default=''):
         try:
             with self._connect() as (conn, cursor):
                 cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
                 row = cursor.fetchone()
-                return row[0] if row else default
+                value = row[0] if row else default
+            return value
         except sqlite3.Error as e:
             self.log.write_log_error('获取设置失败: ' + str(e))
             return default
@@ -94,7 +134,7 @@ class DataAccess:
     def set_setting(self, key, value):
         try:
             with self._connect() as (conn, cursor):
-                cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
+                cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, stored))
                 conn.commit()
                 return True
         except sqlite3.Error as e:
@@ -159,9 +199,8 @@ class DataAccess:
 
     # 检查主机名或者组名是否重复
     def exists(self, name, table):
-        # 白名单校验表名，防止 SQL 注入
-        allowed_tables = ('servers', 'groups')
-        if table not in allowed_tables:
+        # S3: 表名无法参数化，先用白名单校验再拼接，杜绝 SQL 注入
+        if table not in ALLOWED_TABLES:
             self.log.write_log_error('exists 方法：非法表名 ' + str(table))
             return False
         try:
@@ -188,8 +227,10 @@ class DataAccess:
 
     # 添加服务器
     def add_server(self, conn_type, name, host, port, username, password, parent_id, server_info):
+        # S1: 密码加密后入库（已是密文格式的值不会被二次加密）
+        stored_password = encrypt_secret(password)
         with self._connect() as (conn, cursor):
-            cursor.execute('INSERT INTO servers (conn_type, name, host, port, username, password, parent_id, server_info) VALUES (?, ?, ?, ?, ?, ?, ?,?)', (conn_type, name, host, port, username, password, parent_id, server_info))
+            cursor.execute('INSERT INTO servers (conn_type, name, host, port, username, password, parent_id, server_info) VALUES (?, ?, ?, ?, ?, ?, ?,?)', (conn_type, name, host, port, username, stored_password, parent_id, server_info))
             conn.commit()
             return cursor.lastrowid
 
@@ -264,11 +305,15 @@ class DataAccess:
 
     # 更新服务器信息
     def update_server(self, select_collu, content, host):
-        # 安全地构建 SQL 更新语句
-        set_clause = f"{select_collu} = ?"
-        sql = f"UPDATE servers SET {set_clause} WHERE host = ?"
+        # S3: 列名无法参数化，先用白名单校验再拼接，杜绝 SQL 注入
+        if select_collu not in SERVER_COLUMNS:
+            self.log.write_log_error('update_server：非法列名 ' + str(select_collu))
+            return 0
+        # S1: 更新密码时加密存储
+        value = encrypt_secret(content) if select_collu == 'password' else content
+        sql = f"UPDATE servers SET {select_collu} = ? WHERE host = ?"
         with self._connect() as (conn, cursor):
-            cursor.execute(sql, (content, host))
+            cursor.execute(sql, (value, host))
             rowcount = cursor.rowcount
             conn.commit()
             return rowcount
@@ -278,21 +323,25 @@ class DataAccess:
         with self._connect() as (conn, cursor):
             cursor.execute('SELECT name,host,port,username,password FROM servers WHERE name = ?', (name,))
             server = cursor.fetchone()
-            return server if server else None
+            if not server:
+                return None
+            # S1: 密码列解密后返回明文给调用方
+            return server[:4] + (decrypt_secret(server[4]),)
 
     # 根据name返回主机password
     def get_server_password(self, name):
         with self._connect() as (conn, cursor):
             cursor.execute('SELECT password FROM servers WHERE name =?', (name,))
             result = cursor.fetchone()
-            return result[0] if result else None
+            # S1: 读取时解密（历史明文值原样返回）
+            return decrypt_secret(result[0]) if result else None
 
     # 根据host返回主机password
     def get_server_password_by_host(self, host):
         with self._connect() as (conn, cursor):
             cursor.execute('SELECT password FROM servers WHERE host =?', (host,))
             result = cursor.fetchone()
-            return result[0] if result else None
+            return decrypt_secret(result[0]) if result else None
 
     # 更新组信息
     def update_group(self, id, name):
@@ -312,7 +361,8 @@ class DataAccess:
             servers = cursor.fetchall()
 
             for r in servers:
-                tree.insert('', "end", image='', values=(r[1], r[2], r[3], r[4], r[5], r[6], ''))
+                # B63: 密码列统一脱敏，避免搜索结果绕过主列表的脱敏显示
+                tree.insert('', "end", image='', values=(r[1], r[2], r[3], r[4], r[5], '********', ''))
 
             return servers
 

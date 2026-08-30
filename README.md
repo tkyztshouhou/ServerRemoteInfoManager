@@ -41,7 +41,17 @@
 - 服务器说明区、搜索框背景色独立可配，与主界面背景区分
 - 顶部按钮区与"主机名或域名搜索"、"服务器说明"标签保持固定背景色，不随界面背景设置变化
 - 窗口位置与大小记忆：关闭前自动保存，下次启动自动恢复上次布局
-- 服务器树下方左右布局：左侧服务器说明，右侧功能区（Ping 检测 / 远程桌面高级选项 / FAQ）
+- 服务器树下方左右布局：左侧服务器说明，右侧功能区（Ping 检测 / 运维智脑 / FAQ）
+
+### 运维智脑（AI 聊天）
+- 主界面 Ping 检测按钮下方「运维智脑」按钮（`img/btn-ywzn.png`，191x45），点击打开独立多线程 AI 聊天窗口
+- 多模型配置：在「系统设置-连接参数」中自定义模型（名称、API 地址、密钥、模型名、temperature、max_tokens、是否流式、描述）；密钥落库加密、界面以 `sk-ab****1234` 形式遮蔽展示
+- 聊天窗口输入区下方按配置数量动态生成模型单选框，选择对应模型即向该模型 API 地址发起请求
+- 会话管理：会话持久化（独立 `aichat.db`）、支持新建/双击切换、标题重命名、右键删除
+- 思考过程折叠：推理内容默认折叠，可手动展开/收起
+- Markdown 渲染：标题、列表、引用、代码块等；代码块内嵌「复制 / 另存为」按钮
+- 输入长度控制：提交时按所选模型 max_tokens 加权估算，超长自动截取（CJK 1.5 字符/token，其余 4 字符/token）
+- 流式/非流式双通道：支持打字机增量渲染与中途停止；后台线程请求，界面不卡死
 
 ### 远程桌面高级选项
 - 远程音频位置（本地 / 远程）
@@ -52,7 +62,7 @@
 
 ### 设置
 - 工具路径配置（SSH/VNC 工具可执行文件路径）
-- 默认连接参数（用户名、密码、端口）
+- AI 模型连接参数（运维智脑所用，详见上方「运维智脑」）
 - 界面样式（字体、大小、背景颜色、说明区/搜索框颜色）
 - 所有配置持久化到 SQLite 数据库
 
@@ -64,19 +74,19 @@
 ## 环境要求
 
 - **已发布版本（推荐）**：Windows 10 / 11 64 位，无需安装 Python 或任何依赖
-  - 安装版：`ServerRemoteInfoManager-3.0.20260827-Setup.exe`
-  - 绿色版：`ServerRemoteInfoManager-3.0.20260827-Portable.rar`（解压即用）
+  - 安装版：`ServerRemoteInfoManager-4.0.20260830-Setup.exe`
+  - 绿色版：`ServerRemoteInfoManager-4.0.20260830-Portable.rar`（解压即用）
 - **源码运行**：Python 3.10.11 + `tkinter`（标准库）、`Pillow`，Windows 操作系统
 
 ## 安装步骤
 
 ### 方式一：安装版（推荐）
-1. 双击 `ServerRemoteInfoManager-3.0.20260827-Setup.exe`
+1. 双击 `ServerRemoteInfoManager-4.0.20260830-Setup.exe`
 2. 按向导安装（默认安装到 `C:\Program Files\ServerRemoteInfoManager\`）
 3. 安装完成后从开始菜单或桌面快捷方式启动
 
 ### 方式二：绿色版
-1. 解压 `ServerRemoteInfoManager-3.0.20260827-Portable.rar`
+1. 解压 `ServerRemoteInfoManager-4.0.20260830-Portable.rar`
 2. 双击 `ServerRemoteInfoManager.exe` 直接运行，无需安装
 
 ### 方式三：源码运行
@@ -114,16 +124,14 @@ python app.py
 
 ### SSH 连接配置
 1. 点击工具栏最右侧的**设置按钮**（齿轮图标）
-2. 在"连接工具"Tab 中选择 SSH 工具类型（XTerminal / PuTTY / MobaXterm / FinalShell / Xshell）
-3. 在"连接参数"Tab 中填写默认用户名和密码
-4. 点击"保存"
+2. 在"连接工具"Tab 中选择 SSH 工具类型（XTerminal / PuTTY / MobaXterm / FinalShell / Xshell），并填写对应工具路径
+3. 点击"保存"
 
 > 注：若主机记录中已填写用户名和密码，将优先使用主机记录中的值。
 
 ### VNC 连接配置
 1. 在设置对话框的"连接工具"Tab 中填写 vncviewer 的完整路径
-2. 在"连接参数"Tab 中填写默认 VNC 端口（默认 5900）
-3. 点击"保存"
+2. 点击"保存"
 
 ### 编辑主机
 1. 右键主机行 → 编辑主机（需先选中主机，否则弹框提示）
@@ -155,10 +163,6 @@ python app.py
 |-----|------|--------|
 | `ssh_tool_type` | SSH 工具类型 | `XTerminal` |
 | `vnc_tool_path` | VNC 工具路径 | `vncviewer` |
-| `default_username` | 默认用户名 | （空） |
-| `default_password` | 默认密码 | （空） |
-| `default_ssh_port` | 默认 SSH 端口 | `22` |
-| `default_vnc_port` | 默认 VNC 端口 | `5900` |
 | `ui_font` | 界面字体 | `Microsoft YaHei` |
 | `ui_font_size` | 界面字体大小 | `10` |
 | `ui_bg_color` | 界面背景颜色 | `#F0F0F0` |
@@ -170,6 +174,8 @@ python app.py
 | `rdp_drive` | 映射本地驱动器（1=开 / 0=关） | `0` |
 | `rdp_fullscreen` | 全屏模式（1=开 / 0=关） | `0` |
 | `rdp_resolution` | 远程桌面分辨率（如 1024x768） | `1024x768` |
+| `rdp_cred_cleanup` | 启动时清理孤儿 RDP 凭据（1=开启 / 0=关闭） | `1` |
+| `secret_encryption_migrated` | 历史明文密码已加密迁移标记（自动生成） | `1` |
 | `group_expand_state` | 分组展开状态（JSON） | （空） |
 
 ## 目录结构
@@ -180,8 +186,11 @@ Object/
   infoServer.py       # 主界面逻辑
   gui_DA.py           # 数据库访问层
   logs.py             # 日志模块
+opsbrain/
+  __init__.py         # 「运维智脑」AI 聊天功能包（UI/功能/DA 三层分离）
 tools/
   tool.py             # 工具类（连接、文件操作等）
+  secret.py           # 密码加解密（DPAPI 优先 + Fernet 回退）
 img/
   sz.png              # 设置按钮图标
   mstsc.png           # RDP 连接图标
@@ -220,11 +229,14 @@ A：该主机连接类型未实现（如 Radmin）。请在添加/编辑主机�
 **Q：编辑主机时提示"请先选中要修改的主机"？**
 A：编辑前需先在服务器树中点击选中目标主机行。如需取消选中，点击鼠标中键即可。
 
-**Q：密码以明文存储，是否安全？**
-A：当前版本密码确实以明文存储在 SQLite 中（日志已脱敏）。RDP 连接不再产生含密码的临时文件。如需更高安全性，建议自行加密后再录入，或联系管理员规划加密存储方案。
+**Q：主机密码是如何存储的？**
+A：密码**加密后**存入 SQLite（`servers.password`）。Windows 下使用系统 **DPAPI** 加密，密钥由系统按当前 Windows 用户账户管理且从不落盘；数据库文件被拷贝到其它机器、或被其它 Windows 用户登录时无法解密。非 Windows 或 DPAPI 不可用时回退到 `cryptography` 的 Fernet 加密。日志中的密码始终脱敏，RDP 连接也不再产生含密码的临时文件。
+
+> 注意：加密与当前 Windows 用户绑定。**换机器或换用户时请勿直接拷贝 `data.db`**，而应使用「导出服务器 JSON → 导入」迁移数据（导出的 JSON 含明文密码，导出时需确认风险提示，请妥善保管并及时删除）。
 
 **Q：如何备份数据？**
 A：已发布版本备份 `%LOCALAPPDATA%/ServerRemoteInfoManager/data.db` 即可；源码运行则备份项目根目录的 `data.db`。也可通过右键菜单的导入/导出功能导出为 JSON。
+注意：数据库内的密码与当前 Windows 用户绑定加密，**同机同用户备份恢复可用，换机器/换用户必须走 JSON 导出导入**。
 
 **Q：安装版保存设置时报 "unable to open database file"？**
 A：通常是旧版本把数据写在 Program Files 只读目录导致。当前版本数据已自动存放于 `%LOCALAPPDATA%/ServerRemoteInfoManager/`，重装新版即可解决；若仍有问题，请以普通用户（非管理员）运行，或检查该目录是否有写权限。
@@ -236,6 +248,7 @@ A：不会。Windows 下 ping 子进程已通过 `CREATE_NO_WINDOW` 隐藏，检
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| 4.0.20260830 | 2026-08-30 | **新增「运维智脑」AI 聊天**：主界面 Ping 按钮下方新增入口，分层 Python 包 `opsbrain/`（UI/功能/DA 分离）；支持多模型配置、会话持久化、Markdown 渲染与代码块操作、思考模式折叠、输入长度截断，并将「系统设置-连接参数」重构为模型配置面板；**密码加密存储**：新增 `tools/secret.py`（DPAPI 优先 + Fernet 回退），DA 层集成加解密并迁移历史明文密码，修复导出 JSON/主机日志明文密码、update_server 列名注入、RDP 凭据残留等问题；修复连接 RDP 时命令行黑框闪烁；运维智脑按钮与 Ping 按钮同尺寸对齐；连接参数窗口宽度由 400 扩大至 800 |
 | 3.0.20260827 | 2026-08-27 | **FAQ 知识库对话框完善**：新增/修改条目弹窗改为 grid 布局并居中显示，修复因 pack 的 expand 空间耗尽导致"保存/取消"按钮被压缩为 1px 不可见的问题；保存/取消按钮明确化（保存后状态栏反馈、ESC 关闭放弃更改）；**主窗口"保存设置"按钮美化**：绿系主色 + 悬停/按下明暗渐变、加粗字体、加大内边距、磁盘图标（💾）、手型光标，并完善默认/悬停/点击/禁用四态视觉反馈（新增 `set_rdp_save_enabled` 方法） |
 | 2.2.20260825 | 2026-08-25 | RDP 连接重构为临时 .rdp 配置文件 + 凭据管理器方式（连接前清理旧凭据、生成不含密码的临时配置文件、会话关闭后自动清理凭据与临时文件）；新增远程桌面高级选项（音频位置/剪贴板/驱动器映射/全屏/分辨率，持久化存储）；新增 Ping 批量检测（状态列绿✓/红✗）；新增服务器树下方左右布局功能区；密码列默认脱敏显示（右键可查看明文）；图标列缩小、IP地址列加宽；新增 FAQ 知识库按钮（占位）；顶部按钮区与相关标签不随界面背景变色；重命名分组（右键即时持久化）；编辑主机支持修改"主机类型"；窗口位置与大小记忆（关闭自动保存、启动自动恢复）；**发布独立 exe 安装版/绿色版（PyInstaller 打包，含运行环境，无需目标机装 Python）；修复 Ping 黑框、添加主机 exists 表名报错、exe 无图标、按钮图片缺失、保存设置失败（数据目录改 %LOCALAPPDATA%）** |
 | 2.1.20260825 | 2026-08-25 | RDP 连接重构为 Windows 凭据管理器方式（自动写入/清除凭据，不再生成临时文件）；编辑主机三项修复（选中数据获取错误、主机名修改无效、纯数字 IP 类型错误）并新增输入校验；RDP/URL 补齐连接确认弹框；新增鼠标中键释放焦点；修复分组展开状态多层级记录失败；修复空分组不刷新列表；修复启动 -font 报错；界面颜色设置实时生效；分组图标更换为 folder/folder_badge_plus |
@@ -266,12 +279,12 @@ powershell -ExecutionPolicy Bypass -File .\build_release.ps1
 ### 产物
 | 文件 | 说明 | 体积（约） |
 |------|------|-----------|
-| `dist/ServerRemoteInfoManager-3.0.20260827-Setup.exe` | 安装版 | 14.8 MB |
-| `dist/ServerRemoteInfoManager-3.0.20260827-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
+| `dist/ServerRemoteInfoManager-4.0.20260830-Setup.exe` | 安装版 | 14.8 MB |
+| `dist/ServerRemoteInfoManager-4.0.20260830-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
 | `dist/ServerRemoteInfoManager.exe` | 单文件 exe（备用） | 23.5 MB |
 
 ### 发布到 GitHub Release
-- Tag：`v3.0.20260827`
+- Tag：`v4.0.20260830`
 - 上传上述两个发行包作为附件
 - Release notes 复用 `更新说明.txt` 本次更新内容
 

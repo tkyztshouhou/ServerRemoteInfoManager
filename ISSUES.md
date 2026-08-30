@@ -1,6 +1,6 @@
 # 已知问题与待解决事项
 
-> 本文档记录项目当前已知问题、未实现功能及代码质量问题，供迭代参考。
+> 本文档记录项目当前已知问题、功能实现状态与代码质量问题，供迭代参考。
 
 ---
 
@@ -73,6 +73,7 @@
 | B64 | `infoServer.py:右侧功能区` | 远程桌面高级选项内容高度超出可用区域，出现轻微上下滚动 | ✅ 已修复：右侧改为上下结构（Ping+FAQ 同容器左右排列），高级选项区占满剩余高度，不再滚动 |
 | B65 | `infoServer.py:版本读取` | version.txt 为 UTF-8 编码的 VSVersionInfo 多行格式（含 © 字符），代码用默认 GBK 打开抛 `UnicodeDecodeError` 被 except 吞掉，窗口标题长期回退 fallback 旧版本号 | ✅ 已修复（2.2 版）：UTF-8 编码打开并用正则提取 `FileVersion` 字段，fallback 更新为 V2.2.20260825 |
 | B66 | `infoServer.py` | 顶部未 `import re`，`save_rdp_settings` 自定义分辨率校验 `re.match` 时抛 `NameError`（被 except 捕获提示"保存设置失败"），自定义分辨率无法保存 | ✅ 已修复（2.2 版）：顶部补充 `import re` |
+| B67 | `tool.py:run_mstsc` | 连接 RDP 时连续 `cmdkey` 调用（清理/写入/删除）弹出黑色命令行窗口并闪烁：程序以 GUI 方式打包（`console=False`），父进程无控制台，Windows 会为 `cmdkey.exe` 等控制台子系统程序自动新建控制台 | ✅ 已修复：新增 `_hidden_console_kwargs()`，为 Windows 下子进程附加 `CREATE_NO_WINDOW` + `STARTF_USESHOWWINDOW(SW_HIDE)`，并应用于 RDP 全流程的 `cmdkey`/`mstsc` 及 VNC/Radmin/SSH（`shell=True` 拉起 cmd）调用；PuTTY(plink) 为控制台程序，保持窗口可见 |
 | F3 | `infoServer.py:820-847` | Radmin 连接类型无对应分支 | ✅ 已修复：添加 run_radmin 方法并在 connect_server 中添加 Radmin 分支 |
 | S1 | `infoServer.py:935` | 密码明文存储及日志泄露 | ✅ 已修复：对密码进行脱敏处理，避免日志中明文记录密码 |
 | S2 | `infoServer.py:945` | 密码修改操作明文记录密码 | ✅ 已修复：对修改后的密码进行脱敏处理 |
@@ -96,26 +97,34 @@
 
 ---
 
-## 三、未实现功能
+## 三、功能清单与实现状态
 
-| # | 功能 | 位置 | 现状 |
-|---|------|------|------|
-| F1 | ~~SSH 连接~~ | `infoServer.py:827-835` / `tool.py:run_ssh` | ✅ **已实现** — 双击或右键 SSH 连接自动调用终端工具，支持 XTerminal、PuTTY、MobaXterm、FinalShell、Xshell |
-| F2 | ~~VNC 连接~~ | `infoServer.py:836-841` / `tool.py:run_vnc` | ✅ **已实现** — 双击或右键 VNC 连接自动调用 vncviewer |
-| F3 | Radmin 连接 | `infoServer.py:820-847` | ✅ **已实现** — 已添加 Radmin 连接分支 |
-| F4 | 重命名分组 | `infoServer.py:647-655` | ❌ 仅判断是否选中分组，未实现实际重命名逻辑（`update_group` 方法在 DA 层已存在但未被调用） |
-| F5 | 导入分组 | `infoServer.py:612` | ✅ **已实现** — 右键菜单"导入分组"已绑定 `import_group` 方法，支持从JSON文件导入分组数据 |
-| F6 | 导出分组 | `infoServer.py:613` | ✅ **已实现** — 右键菜单"导出分组"已绑定 `export_group` 方法，支持将分组数据导出为JSON文件 |
-| F7 | ~~编辑主机地址~~ | `infoServer.py:452` | ✅ **已修复**（B8）— 编辑下拉框已包含"主机地址"选项 |
-| F8 | 编辑主机类型（conn_type） | `infoServer.py:452` | ❌ 编辑下拉框无"主机类型"选项，无法修改 conn_type 字段 |
-| F9 | 批量添加主机 | README 声称支持 | ❌ 代码中无批量添加功能 |
-| F10 | 导入导出 | README 声称支持 | ✅ **已实现** — 分组和服务器均支持JSON格式的导入导出功能 |
-| F11 | 密码加密存储 | 全局 | ❌ 密码以明文存储在 `data.db` 中，无任何加密 |
-| F12 | 窗口位置记忆 | 全局 | ❌ 窗口大小/位置不持久化，每次启动重置 |
-| F13 | ESC 关闭弹窗 | `infoServer.py:87,1676` | ✅ **已实现** — 主窗口与子窗口（添加/编辑弹窗）均已 `bind('<Escape>', ...)` 关闭窗口 |
-| F14 | 分组双击查看主机 | `infoServer.py:184, 692-708` | ❌ `groupTree_click` 被注释，双击分组无反应（改为 `<<TreeviewSelect>>` 单击触发） |
-| F15 | RDP 凭据异常残留清理 | `tool.py:run_mstsc` | ⚠️ 程序被强杀（断电/任务管理器结束进程）时，`finally` 不执行，凭据 `TERMSRV/ip` 及临时 .rdp 文件可能残留；2.2 版起每次连接前会主动清理该主机旧凭据（残留凭据风险已大幅缓解，临时 .rdp 文件不含密码，泄露风险低）；可手动 `cmdkey /delete:TERMSRV/ip` 清除（正常关闭远程桌面后均会自动清除） |
-| F16 | FAQ 知识库功能 | `infoServer.py:show_faq` | ✅ **已实现（3.0 完善）** — 新增根目录 `faq/` Python 包（职责分离：da.py / server.py / ui.py / main.py / sample_data.py / __init__.py）：点击 FAQ 按钮打开独立 Toplevel 窗口；左侧 ttk.Treeview 树形分类导航（支持动态添加分类/子分类），右侧上搜索栏+结果列表、下 Markdown 渲染区（tkhtmlview，缺失时降级纯文本）；SQLite3 独立库 `faq.db`（%LOCALAPPDATA%/ServerRemoteInfoManager）；支持关键词模糊检索（LIKE）并以 daemon 线程异步执行、主线程 `after()` 回填避免 UI 卡顿；支持 text / sql / doc 三种内容类型预览；DA 层预留 `embedding()` 与 `vector_search()` RAG 扩展接口（后期可接入大模型实现向量检索+RAG）。`requirements.txt` 与 `build.spec` 已补充 `markdown`/`tkhtmlview` 依赖与隐藏导入。**3.0 完善**：新增/修改条目弹窗改用 grid 布局并居中显示，修复 pack 的 `expand=True` 耗尽空间导致"保存/取消"按钮被压缩为 1px 不可见的问题（已通过真实窗口四态测试验证按钮可见）；保存后状态栏反馈、ESC 关闭放弃更改；主窗口"保存设置"按钮美化（绿系悬停/按下渐变+磁盘图标+四态反馈，新增 `set_rdp_save_enabled` 禁用切换方法） |
+> **2026-08-30 全量核实**：本节原"未实现功能"清单已逐项对照当前代码复核——F1~F8、F10~F13、F15、F16 **全部已实现**；F9、F14 经评估确定**无需开发**，已从列表移入下方「已关闭（无需开发）」小节。当前**未实现功能列表为空**，故本节更名为"功能清单与实现状态"。
+
+| # | 功能 | 位置 | 状态 | 核实说明（2026-08-30） |
+|---|------|------|------|------------------------|
+| F1 | SSH 连接 | `tool.py:run_ssh` / `infoServer.py:connect_server` | ✅ **已完成** | `connect_server` 的 SSH 分支读取用户名密码后调用 `Tool.run_ssh`，支持 XTerminal / PuTTY(plink) / MobaXterm / FinalShell / Xshell 五种工具与独立路径配置 |
+| F2 | VNC 连接 | `tool.py:run_vnc` / `infoServer.py:1884` | ✅ **已完成** | `connect_server` 的 VNC 分支调用 `Tool.run_vnc(host, port, callback=...)`，启动 vncviewer 并在失败时回调弹窗提示 |
+| F3 | Radmin 连接 | `tool.py:run_radmin` / `infoServer.py:1909` | ✅ **已完成** | `connect_server` 的 Radmin 分支调用 `Tool.run_radmin`，命令为 `radmin.exe /connect:host:port` |
+| F4 | 重命名分组 | `infoServer.py:1636 rename_group` | ✅ **已完成** | 原记录为 ❌（仅判断选中、未调 `update_group`），现已核实：分组右键菜单"重命名分组"（`infoServer.py:1566`）绑定 `rename_group`，方法内弹出重命名对话框并调用 `db.update_group(group_id, new_name)`（`infoServer.py:1677`）后刷新分组树，功能完整可用 |
+| F5 | 导入分组 | `infoServer.py:1695 import_group` | ✅ **已完成** | 分组右键菜单"导入分组"（`1568`）绑定 `import_group`，从 JSON 文件导入分组数据并刷新分组树 |
+| F6 | 导出分组 | `infoServer.py:1722 export_group` | ✅ **已完成** | 分组右键菜单"导出分组"（`1569`）绑定 `export_group`，将分组数据导出为 JSON 文件 |
+| F7 | 编辑主机地址 | `infoServer.py:1291 字段映射表` | ✅ **已完成** | 编辑弹窗字段映射表含 `'主机地址': 'host'`（B8 修复），并带非空校验与地址查重 |
+| F8 | 编辑主机类型（conn_type） | `infoServer.py:1292 字段映射表` | ✅ **已完成** | 原记录为 ❌（下拉框无该选项），现已核实：字段映射表含 `'主机类型': 'conn_type'`，编辑弹窗可直接修改；另有服务器右键"修改主机类型"入口调用 `db.update_server('conn_type', ...)`（`infoServer.py:1390`） |
+| F10 | 导入导出 | `infoServer.py:1695/1722/1750/1786` | ✅ **已完成** | 分组与服务器各有一对导入/导出：`import_group`/`export_group`、`import_server`/`export_server`，均为 JSON 格式；服务器导出前含明文密码风险确认，导入时密码自动加密 |
+| F11 | 密码加密存储 | `tools/secret.py` / `Object/gui_DA.py` | ✅ **已完成** | 新增 `tools/secret.py`：Windows 走系统 DPAPI，其余环境回退 Fernet；`servers.password` 与 `settings.default_password` 加密入库，首次启动自动迁移历史明文（详见「七（续）」S1） |
+| F12 | 窗口位置记忆 | `infoServer.py:113/131 _save/_load_window_state` | ✅ **已完成** | 原记录为 ❌（不持久化），现已核实：`_save_window_state` 解析 geometry 并写入 settings（`last_window_x/y/width/height`），`_load_window_state` 启动时 `geometry()` 恢复；由 `WM_DELETE_WINDOW` → `_on_close`（`infoServer.py:144`）触发保存，持久化链路完整 |
+| F13 | ESC 关闭弹窗 | `infoServer.py:102/1692`、`faq/ui.py:150/493` | ✅ **已完成** | 主窗口 `bind('<Escape>')` → `_close_top_window` 销毁所有 Toplevel；添加/编辑弹窗自身也绑定 ESC；FAQ 窗口及其新增/修改条目对话框同样绑定 ESC |
+| F15 | RDP 凭据异常残留清理 | `tools/tool.py:cleanup_rdp_credentials / cleanup_temp_rdp_files` | ✅ **已完成** | 启动时扫描清理孤儿 TERMSRV 凭据（开关 `rdp_cred_cleanup`，默认开启）+ 清理超过 1 小时的残留 `mstsc_*.rdp`；连接前清理（B62）保留为第二道防线（详见「七（续）」S6） |
+| F16 | FAQ 知识库功能 | `infoServer.py:2152 show_faq` / `faq/` 包 | ✅ **已完成** | 主界面 FAQ 按钮绑定 `show_faq`（`infoServer.py:348/353`，图片缺失时降级文字按钮）；`faq/` 包按 da / server / ui / main / sample_data 分层，独立库 `faq.db`；树形分类导航 + 关键词检索 + Markdown 渲染（缺 tkhtmlview 时降级纯文本）+ text/sql/doc 三种内容预览 |
+| F17 | 运维智脑（AI 聊天） | `opsbrain/` 包 / `infoServer.py:show_ops_brain` | ✅ **已完成**（2026-08-30） | 主界面 Ping 按钮下方新增「运维智脑」按钮（`infoServer.py` 新增 `opsbrain_btn_container` + `show_ops_brain`）；新建 `opsbrain/` 包分层实现（da 数据层 / service 功能层 / ui 界面层 / mdrender Markdown 渲染 / token 长度控制）；支持多模型配置（模型列表增删改、排序、密钥落库加密+界面遮蔽）、会话持久化（独立 `aichat.db`）、Markdown 渲染与代码块复制/另存、思考过程折叠、输入长度加权截断、流式/非流式双通道与停止生成（详见下方「九、运维智脑（F17）实现说明」） |
+
+### 已关闭（评估后确定无需开发）
+
+| # | 功能 | 结论 | 关闭理由 |
+|---|------|------|----------|
+| F9 | 批量添加主机 | ⛔ **无需开发** | 经评估不纳入开发计划：批量录入已有等价且更安全的替代路径——服务器右键「导入服务器」支持 JSON 批量导入（`import_server`，`infoServer.py:1750`），可一次性导入任意数量主机，且支持"导出 JSON → 编辑 → 导入"的批量编辑流程。再单独做一套批量录入 UI 属于重复建设，且需重复实现现有的主机名/地址查重、端口校验、密码加密等逻辑，维护成本高。另：原清单备注的「README 声称支持」已不成立——当前 README 仅描述 Ping 批量检测与 JSON 导入导出，并未承诺批量录入 UI，无文档与实现不一致问题。如后续确有高频逐条录入需求，再评估在添加主机弹窗内增加"连续添加"模式。 |
+| F14 | 分组双击查看主机 | ⛔ **无需开发** | 经评估不纳入开发计划：分组查看主机的交互已由**单击**承担——`group_tree` 绑定 `<<TreeviewSelect>>` → `on_group_selection_change`（`infoServer.py:378`）在单击时即刷新右侧服务器列表，比双击更符合直觉且少一次操作；原 `groupTree_click` 死代码已在 Q10 中删除。双击与单击指向同一行为，实现双击只会增加"双击时先触发一次单击"的事件冲突与冗余代码，无实际收益。 |
 
 ---
 
@@ -135,6 +144,12 @@
 ### 3. 版本号更新
 - `version.txt`：`filevers`/`prodvers` 改为 `(3, 0, 2026, 827)`，`FileVersion`/`ProductVersion` 改为 `3.0.20260827`（程序窗口标题从此文件读取）
 - `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `3.0.20260827`
+
+### 4. 4.0.20260830 版本号更新（本轮）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 0, 2026, 830)`，`FileVersion`/`ProductVersion` 改为 `4.0.20260830`（程序窗口标题从此文件读取）
+- `更新说明.txt`：新增「★ 4.0.20260830 更新」块（运维智脑 AI 聊天、密码加密存储、导出/日志明文修复、update_server 注入加固、RDP 凭据残留清理、RDP 连接黑框修复、运维智脑按钮美化对齐、连接参数窗口加宽一倍、移除显示密钥复选框），并在「不兼容改动」补充密码加密存储说明
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.0.20260830`；目录结构补充 `opsbrain/`、`tools/secret.py`
+- 关联条目：RDP 连接黑框闪烁修复见 **B67**（子进程附加 `CREATE_NO_WINDOW` + `SW_HIDE`），密码加密见 **S1**、SQL 注入加固见 **S3**、RDP 凭据残留清理见 **S6**、运维智脑实现见 **F17**
 
 ---
 
@@ -212,31 +227,126 @@
 
 | # | 风险 | 说明 | 状态 |
 |---|------|------|------|
-| S1 | 密码明文存储 | `servers.password` 明文存入 sqlite | ⚠️ 未解决（日志已脱敏）。建议使用 `cryptography` 库加密，或至少使用 base64 + 盐值混淆 |
+| S1 | 密码明文存储 | `servers.password` 明文存入 sqlite | ✅ **已解决**：新增 `tools/secret.py`，Windows 下用系统 DPAPI（绑定当前用户账户、密钥不落盘）加密，非 Windows / DPAPI 不可用时回退 `cryptography` Fernet（PBKDF2-HMAC-SHA256 派生，随机盐随密文存储），均不可用才降级明文并告警；`settings.default_password` 同样加密；首次启动自动迁移历史明文；导出 JSON 解密为明文前增加风险二次确认；添加主机日志密码脱敏 |
 | S2 | ~~RDP 文件含明文密码~~ | ~~`tool.py:86` 将密码明文写入 `temp.rdp`~~ | ✅ **保持已解决**（2.2 版）：RDP 重新生成临时 .rdp 文件，但文件中**不含密码**（仅连接地址、用户名与高级选项），密码仅经凭据管理器传递 |
-| S3 | SQL 注入 | `gui_DA.py:110` 表名通过 f-string 拼接 | ⚠️ 已加白名单校验（B13），建议进一步参数化 |
+| S3 | SQL 注入 | `gui_DA.py` 表名/列名通过 f-string 拼接 | ✅ **已解决**：SQL 标识符无法参数化，改为常量白名单校验——`ALLOWED_TABLES`（`exists` 表名）、`SERVER_COLUMNS`（`update_server` 列名），非法标识符直接拒绝执行并写错误日志；其余 SQL 全部使用 `?` 占位符传参 |
 | S4 | ~~日志泄露敏感信息~~ | ~~`infoServer.py` 日志中记录用户名和密码~~ | ✅ **已解决**：日志中密码已脱敏（S1/S2/S4） |
 | S5 | ~~临时文件竞态~~ | ~~`tool.py:80` `temp.rdp` 写在固定路径，多实例并发时互相覆盖~~ | ✅ **保持已解决**（2.2 版）：临时 .rdp 改用 `tempfile.mkstemp` 生成唯一文件名，多实例并发互不干扰，会话关闭后自动删除 |
-| S6 | RDP 凭据残留 | 程序被强杀时 `finally` 不执行，`TERMSRV/ip` 凭据可能残留在系统凭据管理器 | ⚠️ 低风险（2.2 版已缓解）：每次连接前主动清理该主机旧凭据（B62），即使残留也会在下次连接时被清除；可进一步规划启动时扫描清理孤儿凭据 |
+| S6 | RDP 凭据残留 | 程序被强杀时 `finally` 不执行，`TERMSRV/ip` 凭据可能残留在系统凭据管理器 | ✅ **已解决**：`Tool.cleanup_rdp_credentials()` 启动时扫描全部 TERMSRV 凭据，删除数据库中已不存在主机的孤儿凭据（可由 settings 表 `rdp_cred_cleanup = 0` 关闭）；新增 `Tool.cleanup_temp_rdp_files()` 一并清理残留的临时 `mstsc_*.rdp`（仅清理超过 1 小时的，避免影响进行中的连接）；保留 B62 的连接前清理作为第二道防线 |
+
+---
+
+## 七（续）、本轮安全风险处理记录
+
+至此第七节"安全风险"已全部闭环（S1/S2/S3/S4/S5/S6 均为已解决）。本轮针对 S1、S3、S6 的处理如下：
+
+### S1 密码加密存储（P0）
+
+| 项目 | 处理内容 |
+|------|----------|
+| 新增模块 | `tools/secret.py` —— 统一封装加密/解密/脱敏，存储格式 `enc:v1:<backend>:<base64>` |
+| 后端优先级 | ① **Windows DPAPI**（`ctypes` 调用 `crypt32.dll` 的 `CryptProtectData`/`CryptUnprotectData`）：零第三方依赖，密钥由系统按当前用户账户管理且从不落盘，数据库被拷到其它机器或由其它用户登录时无法解密；② **Fernet**（`cryptography`）：`PBKDF2-HMAC(SHA256)` 20 万轮从「机器特征种子 + 随机盐」派生主密钥，随机盐随密文一起存储，无需密钥文件；③ 两者都不可用时**降级明文**并写错误日志，保证功能不中断 |
+| 影响范围 | `servers.password`（新增/编辑/读取）、`settings.default_password`（默认密码） |
+| 兼容迁移 | 无 `enc:v1:` 前缀的值一律视为历史明文，读取时原样返回；首次启动由 `DataAccess.migrate_plaintext_secrets()` 批量加密，用 `settings.secret_encryption_migrated` 标记保证幂等 |
+| 关联修复 | `gui_DA.search_servers` 搜索结果原样把密码明文插入树（绕过 B63 脱敏），已改为 `********`；`infoServer.add_server_window` 日志明文记录密码，已改用 `secret.mask()` 脱敏（S4 遗留） |
+| 导出风险 | `export_server` 从库里读出的是密文，导出前解密为明文以便备份迁移，但**写入文件前增加风险二次确认弹窗**（提示含明文密码、妥善保管、及时删除）；`import_server` 导入时明文自动加密、密文不被二次加密 |
+| 使用限制 | 加密与当前 Windows 用户绑定：换机器或换用户拷贝 `data.db` 会导致密码无法解密（解密失败返回空串并写日志）。**跨机器迁移请走"导出服务器 JSON → 导入"** |
+
+### S3 SQL 注入加固
+
+- `exists()` 的表名、`update_server()` 的列名无法用 `?` 参数化，改为常量白名单校验：`ALLOWED_TABLES = ('servers', 'groups')`、`SERVER_COLUMNS = ('conn_type','name','host','port','username','password','parent_id','server_info')`，非法标识符拒绝执行并写错误日志。
+- 其余全部 SQL 均已使用 `?` 占位符传参，无字符串拼接值。
+
+### S6 RDP 凭据残留
+
+- `Tool.cleanup_rdp_credentials()` 增加启动扫描清理：读取 `cmdkey /list` 的全部 `TERMSRV/*` 凭据，删除数据库中已不存在主机的孤儿凭据；新增开关 settings 表 `rdp_cred_cleanup`（默认 `1` 开启，置 `0` 可关闭，避免误删用户手动保存的其它 RDP 凭据）。
+- 新增 `Tool.cleanup_temp_rdp_files()`：清理系统临时目录中残留的 `mstsc_*.rdp`，仅删除超过 1 小时的文件，避免影响进行中的连接。
+- 两者均在 `InfoServer.__init__` 启动时调用；B62 的"连接前清理"保留为第二道防线。
+
+### 依赖与打包
+
+- `requirements.txt`：
+  - `cryptography==46.0.3` 登记为**可选回退依赖**（Windows 下走 DPAPI 时无需安装）；文件头部注释同步说明依赖分层（运行时必需 / FAQ / 可选回退 / 开发打包）。
+  - 修复缺失项：补入运行时必需的 `Pillow==12.1.0`（GUI 图标与 Font Awesome 渲染，`infoServer.py` 直接 `import PIL`）——此前 README「源码运行」与「打包前置依赖」均已声明 Pillow，但依赖清单中缺失，按 `pip install -r requirements.txt` 全新装机会因无 Pillow 直接启动失败。
+- `build.spec`：`hiddenimports` 增加 `tools.secret`；并加注说明 `cryptography` 仅作回退后端，若确定只面向 Windows 可将其加入 `excludes` 以精简发行包体积（代价是失去 Fernet 回退）。
+- `README.md` 同步：修正「密码以明文存储」的过期 FAQ（现为 DPAPI/Fernet 加密存储），补充跨机器迁移只能走 JSON 导出导入的限制；配置项表补充 `rdp_cred_cleanup`、`secret_encryption_migrated`。
 
 ---
 
 ## 八、优先修复建议
 
 ### P0（立即修复，影响基本功能）
-1. **S1**：密码明文存储（唯一剩余的 P0 级安全风险；日志脱敏和临时文件问题已解决）
+> 暂无 —— S1（密码明文存储）已修复，第七节"安全风险"全部闭环
 
 ### P1（近期修复，影响体验）
-2. **F15/S6**：RDP 凭据残留扫描清理（2.2 版已通过连接前清理缓解，待规划启动时扫描清理孤儿凭据）
+> 暂无 —— F15/S6（RDP 凭据残留扫描清理）已修复
 
 ### P2（中期优化）
-3. **Q5**：重复代码抽象（数据库连接上下文管理器）
-4. **Q7**：数据库连接改用 `with` 上下文管理器
-5. **C7**：相对路径改绝对路径
-6. **F9**：批量添加主机
-7. **F11**：密码加密存储
+> 暂无 —— F9（批量添加主机，JSON 导入已覆盖）、F14（分组双击查看主机，单击交互已覆盖）经评估确定无需开发，已移入第三节「已关闭」小节
 
-> 注：F4（重命名分组）、F8（编辑主机类型）、F12（窗口位置记忆）已在 2.2 版实现，移出优先修复列表。
+> 注：F4（重命名分组）、F8（编辑主机类型）、F12（窗口位置记忆）已在 2.2 版实现（2026-08-30 代码复核确认）；Q5/Q7（数据库连接上下文管理器）、C7（绝对路径）、F11（密码加密存储）、F15/S6（RDP 凭据残留）均已解决，移出优先修复列表。
+
+---
+
+## 九、运维智脑（F17）实现说明
+
+### 9.1 需求与方案
+新增独立的 AI 聊天模块，主界面「Ping 检测」按钮下方提供入口，打开多线程聊天窗口；支持多模型自定义配置、会话持久化、Markdown 渲染与代码块操作、思考过程折叠、输入长度自动截取。
+
+经与用户确认的技术选型：
+- **HTTP 客户端**：`requests`（流式 SSE 解析简单可靠），已登记 `requirements.txt` 与 `build.spec`
+- **存储**：模型配置放主库 `data.db`（新建 `ai_models` 表），聊天记录放独立库 `aichat.db`（与 `faq.db` 一致的用户数据目录隔离策略）
+- **Markdown 渲染**：自研轻量分块渲染（`opsbrain/mdrender.py`），代码块内嵌「复制 / 另存为」按钮，不依赖 tkhtmlview
+- **长度控制**：字符加权估算（CJK 1.5 字符/token，其余 4 字符/token，零新增依赖）
+
+### 9.2 分层结构
+| 文件 | 职责 |
+|------|------|
+| `opsbrain/__init__.py` | 惰性导出 `open_ops_brain` |
+| `opsbrain/main.py` | 入口层：解析用户数据目录得到 `aichat.db` 路径，单例打开/复用窗口，异常兜底日志 |
+| `opsbrain/da.py` | DA 层：`ModelDAO`（主库 `ai_models` 建表与 CRUD/排序/启用）、`ChatDAO`（独立库会话表/消息表建表与 CRUD/级联删除） |
+| `opsbrain/service.py` | 功能层：`ModelService`（校验、密钥加解密与遮蔽）、`ChatService`（上下文组装、发送、落库）、`AIClient`（requests 流式/非流式、SSE 解析、错误分类） |
+| `opsbrain/token.py` | 长度控制：`estimate_tokens` / `input_budget` / `truncate_context` / `truncate_single` |
+| `opsbrain/mdrender.py` | Markdown 轻量解析与分块渲染（标题/引用/列表/代码块/行内码/粗体/斜体），代码块工具栏 |
+| `opsbrain/ui.py` | UI 层：`OpsBrainWindow`（会话列表、消息滚动区、输入区、模型单选框动态生成） |
+
+### 9.3 数据库表
+主库 `data.db`（新增）：
+```
+ai_models(id, name UNIQUE, api_url, api_key(加密), model_name,
+          temperature REAL, max_tokens INTEGER, supports_stream INTEGER,
+          description TEXT, sort_order INTEGER, enabled INTEGER,
+          created_at TEXT, updated_at TEXT)
+```
+独立库 `aichat.db`（新建）：
+```
+chat_sessions(id, title, model_id, model_name, created_at, updated_at)
+chat_messages(id, session_id, role, content, thinking, created_at)
+```
+
+### 9.4 关键实现点
+- **密钥三段式**：落库 `secret.encrypt`（DPAPI/Fernet）；读取 `secret.decrypt`；界面展示 `mask_key`（保留前 4 后 4，中间 `****`），表单 Entry 默认 `show='*'` 并提供显示切换
+- **思考折叠**：`<think>…</think>` 标签或 `reasoning_content` 字段归一化后折叠展示，默认折叠、可手动展开
+- **流式双通道**：`supports_stream=1` 走 SSE 增量渲染 + 可中途停止（取消标志 + 关闭响应流）；`=0` 走一次性返回
+- **输入长度控制**：提交时按所选模型 `max_tokens` 加权估算，超 `max_tokens×(1-储备比例)` 时优先丢弃最早历史轮次，单条仍超则尾部硬截断并提示
+- **多线程**：后台线程执行请求 + 主线程 `after()` 回填（复用 `ping_all_servers` 范式），窗口关闭不阻塞退出
+
+### 9.5 设置窗口改造（需求 6）
+「系统设置-连接参数」Tab 重构为 AI 模型配置：左侧模型列表（新增/删除/上移/下移），右侧参数表单（含密钥遮蔽预览）。同时移除了原有的「默认用户名 / 默认密码 / 默认 SSH 端口 / 默认 VNC 端口」四项，包括 `save_settings` 保存逻辑、`restore_defaults` 默认值、`gui_DA.ENCRYPTED_SETTING_KEYS`（`default_password`）白名单、README 文档引用，已通过 code-explorer 全仓排查确保无悬挂读写残留。
+
+### 9.6 验证情况
+- DA 层：临时库脚本验证 `ai_models` 与 `chat_sessions/chat_messages` 的 CRUD 与级联删除
+- 功能层：桩对象模拟流式/非流式/401 鉴权失败与输入截断断言通过
+- UI 层：隔离数据目录实例化主窗口 + 打开聊天窗口，验证按钮、模型单选框、Markdown 渲染、新建会话均正常
+- 主程序：启动冒烟验证「运维智脑」按钮与改造后的设置窗口无报错
+
+### 9.7 外观与设置窗口微调（2026-08-30）
+- 新增 `img/btn-ywzn.png`（191x45 紫色圆角胶囊按钮，含白色「运维智脑」文字与脑形图标），与「Ping 检测」按钮同尺寸、同 `padx=(25,10)`、同 `width=191/height=45` 对齐，视觉风格统一
+- 「系统设置」窗口宽度由 400 扩大至 800（高度保持 650），「连接参数」Tab 内的模型列表框（250→300）、参数表单区（x=280/宽370 → x=330/宽440）与输入框（22→40，描述 38→56）同步加宽，提供更宽敞的编辑区域
+
+### 9.8 移除「显示密钥」复选框（2026-08-30 收尾）
+- 「连接参数」模型参数表单中不再提供「显示密钥」复选框与明文切换逻辑（`toggle_key_show` 移除），密钥输入框始终以 `show='*'` 掩码显示，界面更简洁、避免明文暴露
+- 保留「当前密钥：****」遮蔽预览（`lbl_key_mask`），便于编辑时确认已配置密钥而不泄露全文
 
 ---
 

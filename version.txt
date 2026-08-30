@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(3, 0, 2026, 827),
-    prodvers=(3, 0, 2026, 827),
+    filevers=(4, 0, 2026, 830),
+    prodvers=(4, 0, 2026, 830),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,12 +17,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'LiuShan'),
             StringStruct('FileDescription', '服务器运维管理工具'),
-            StringStruct('FileVersion', '3.0.20260827'),
+            StringStruct('FileVersion', '4.0.20260830'),
             StringStruct('InternalName', 'app'),
             StringStruct('LegalCopyright', '© Liu Copyright Information'),
             StringStruct('OriginalFilename', 'app.exe'),
             StringStruct('ProductName', '服务器运维管理工具'),
-            StringStruct('ProductVersion', '3.0.20260827')
+            StringStruct('ProductVersion', '4.0.20260830')
           ]
         )
       ]

@@ -1,10 +1,10 @@
 [Setup]
 AppName=服务器运维管理工具
-AppVersion=3.0.20260827
+AppVersion=4.0.20260830
 AppPublisher=LiuShan
 DefaultDirName={autopf}\ServerRemoteInfoManager
 DefaultGroupName=服务器运维管理工具
-OutputBaseFilename=ServerRemoteInfoManager-3.0.20260827-Setup
+OutputBaseFilename=ServerRemoteInfoManager-4.0.20260830-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 OutputDir=dist

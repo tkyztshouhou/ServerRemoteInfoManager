@@ -15,10 +15,17 @@ hiddenimports = []
 hiddenimports += collect_submodules('tkinter')
 hiddenimports += collect_submodules('PIL')
 hiddenimports += collect_submodules('faq')
+# F17: 运维智脑（AI 聊天）功能包（UI/功能/DA 三层）
+hiddenimports += collect_submodules('opsbrain')
+# S1: tools.secret 为密码加密模块（Windows 下走系统 DPAPI，无需第三方库）
+#     若打包环境中安装了 cryptography，PyInstaller 会自动收集它作为非 Windows /
+#     DPAPI 失败时的回退后端；如确定只在 Windows 运行且需精简体积，
+#     可将 'cryptography' 加入下方 excludes（代价是失去 Fernet 回退能力）。
 hiddenimports += ['sqlite3','subprocess','threading','webbrowser','re',
                   'tempfile','os','sys','datetime','json','base64',
                   'hashlib','shutil','pathlib',
-                  'markdown','tkhtmlview']
+                  'markdown','tkhtmlview',
+                  'tools.secret']
 
 datas = [
     (os.path.join('img'), 'img'),

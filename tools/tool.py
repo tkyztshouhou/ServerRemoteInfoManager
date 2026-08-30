@@ -4,6 +4,7 @@
 import datetime
 import os
 import subprocess
+import sys
 import threading
 import time
 import re
@@ -14,6 +15,34 @@ import re
     @ Date: 2024.09.04
     @ Description: 工具类
 '''
+
+def _hidden_console_kwargs():
+    """构造 subprocess 的隐藏控制台参数，避免 GUI 程序拉起控制台程序时闪现黑色命令行窗口
+
+    程序打包为 GUI（console=False）运行时，父进程没有控制台，Windows 会为
+    cmdkey.exe 等控制台子系统程序自动创建一个新的控制台窗口，表现为黑框一闪而过。
+
+    返回可直接解包传给 subprocess.run/call/Popen 的 kwargs；非 Windows 平台返回空字典。
+    """
+    if not sys.platform.startswith('win'):
+        return {}
+    kwargs = {}
+    # Python 3.7+ 提供 CREATE_NO_WINDOW（0x08000000），不创建控制台
+    creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    startupinfo = None
+    try:
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0  # SW_HIDE
+        startupinfo = si
+    except Exception:
+        startupinfo = None
+    if creationflags:
+        kwargs['creationflags'] = creationflags
+    if startupinfo is not None:
+        kwargs['startupinfo'] = startupinfo
+    return kwargs
+
 
 class Tool:
     def __init__(self, db_path=None):
@@ -72,14 +101,41 @@ class Tool:
             self.log.write_log_error('ip格式错误: ' + ip)
             return False
 
-    # F15: 清理残留的 RDP 凭据
-    def cleanup_rdp_credentials(self):
-        """清理凭据管理器中已删除服务器的 RDP 凭据残留"""
+    # 读取 settings 表配置（sqlite 直连，避免与 Object.gui_DA 相互依赖）
+    def _get_setting(self, key, default=''):
+        if not self.db_path or not os.path.exists(self.db_path):
+            return default
         try:
-            # 获取所有 TERMSRV 凭据
+            import sqlite3
+            conn = sqlite3.connect(self.db_path)
+            try:
+                cur = conn.cursor()
+                cur.execute('SELECT value FROM settings WHERE key = ?', (key,))
+                row = cur.fetchone()
+                return row[0] if row else default
+            finally:
+                conn.close()
+        except Exception:
+            return default
+
+    # F15/S6: 清理残留的 RDP 凭据
+    def cleanup_rdp_credentials(self):
+        """启动时扫描并清理凭据管理器中已删除服务器的 RDP 孤儿凭据
+
+        S6：程序被强杀时连接后的 finally 不执行，TERMSRV/ip 凭据会残留。
+        本方法在启动时扫描全部 TERMSRV 凭据，删除数据库中已不存在主机的凭据；
+        可通过 settings 表 `rdp_cred_cleanup = 0` 关闭该自动清理。
+        """
+        try:
+            # S6: 自动清理开关（默认开启）
+            if str(self._get_setting('rdp_cred_cleanup', '1')) != '1':
+                return True
+
+            # 获取所有 TERMSRV 凭据（隐藏控制台窗口，避免黑框闪烁）
             result = subprocess.run(
                 ['cmdkey', '/list'],
-                capture_output=True, text=True, check=False
+                capture_output=True, text=True, check=False,
+                **_hidden_console_kwargs()
             )
             if result.returncode != 0:
                 return False
@@ -113,7 +169,8 @@ class Tool:
                     try:
                         subprocess.run(
                             ['cmdkey', '/delete:TERMSRV/' + ip],
-                            capture_output=True, text=True, check=False
+                            capture_output=True, text=True, check=False,
+                            **_hidden_console_kwargs()
                         )
                         cleaned.append(ip)
                     except Exception:
@@ -124,6 +181,38 @@ class Tool:
             return True
         except Exception as e:
             print(f"[F15] 清理 RDP 凭据失败: {e}")
+            return False
+
+    # F15/S6: 清理残留的临时 .rdp 文件
+    def cleanup_temp_rdp_files(self, min_age_seconds=3600):
+        """删除系统临时目录中本程序生成的 mstsc_*.rdp 残留文件
+
+        程序被强杀时连接结束的 finally 不执行，临时 .rdp 文件会残留。
+        仅删除超过 min_age_seconds（默认 1 小时）的文件，避免影响正在进行的连接。
+        该文件不含密码，残留主要泄露主机地址与用户名。
+        """
+        import tempfile
+        import time
+        try:
+            tmp_dir = tempfile.gettempdir()
+            now = time.time()
+            removed = []
+            for name in os.listdir(tmp_dir):
+                if not (name.startswith('mstsc_') and name.endswith('.rdp')):
+                    continue
+                path = os.path.join(tmp_dir, name)
+                try:
+                    if now - os.path.getmtime(path) < min_age_seconds:
+                        continue
+                    os.remove(path)
+                    removed.append(name)
+                except Exception:
+                    pass
+            if removed:
+                print(f"[F15] 已清理 {len(removed)} 个残留的临时 .rdp 文件")
+            return True
+        except Exception as e:
+            print(f"[F15] 清理临时 .rdp 文件失败: {e}")
             return False
 
     # 运行mstsc
@@ -151,7 +240,8 @@ class Tool:
             # ---- 1. 连接前清理与本次主机相关的凭据（避免密码冲突/残留） ----
             try:
                 subprocess.run(['cmdkey', '/delete:' + target],
-                               capture_output=True, text=True, check=False)
+                               capture_output=True, text=True, check=False,
+                               **_hidden_console_kwargs())
             except Exception:
                 pass
 
@@ -229,14 +319,15 @@ class Tool:
             # ---- 4. 写入凭据到 Windows 凭据管理器（列表形式传参，避免密码特殊字符被 shell 解析） ----
             add_result = subprocess.run(
                 ['cmdkey', '/generic:' + target, '/user:' + str(username), '/pass:' + str(password)],
-                capture_output=True, text=True, check=False
+                capture_output=True, text=True, check=False,
+                **_hidden_console_kwargs()
             )
             if add_result.returncode != 0:
                 print(f"添加凭据失败，无法连接 {ip}:{port}")
                 return False
 
-            # 启动 mstsc 打开临时 .rdp（阻塞直到远程桌面会话关闭）
-            subprocess.call(['mstsc', tmp_rdp])
+            # 启动 mstsc 打开临时 .rdp（阻塞直到远程桌面会话关闭，隐藏控制台窗口避免黑框闪烁）
+            subprocess.call(['mstsc', tmp_rdp], **_hidden_console_kwargs())
             return True
         except Exception as e:
             print(f"运行mstsc时出错: {e}")
@@ -245,7 +336,8 @@ class Tool:
             # ---- 5. 会话关闭（或异常）后，清理凭据与临时文件 ----
             try:
                 subprocess.run(['cmdkey', '/delete:' + target],
-                               capture_output=True, text=True, check=False)
+                               capture_output=True, text=True, check=False,
+                               **_hidden_console_kwargs())
             except Exception:
                 pass
             if tmp_rdp and os.path.exists(tmp_rdp):
@@ -313,7 +405,10 @@ class Tool:
                     callback(error_msg)
                 return False
 
-            self.thread_it(subprocess.Popen, cmd, shell=True)
+            # shell=True 会拉起 cmd，隐藏其控制台窗口避免黑框闪烁；
+            # PuTTY(plink) 本身是控制台程序，需要显示终端窗口保持可见，故不隐藏
+            popen_kwargs = {} if ssh_tool_type == 'PuTTY(plink)' else _hidden_console_kwargs()
+            self.thread_it(subprocess.Popen, cmd, shell=True, **popen_kwargs)
             return True
         except Exception as e:
             # 提供更友好的错误信息
@@ -345,7 +440,7 @@ class Tool:
 
             addr = f"{host}:{port}"
             cmd = ['vncviewer', addr]
-            self.thread_it(subprocess.Popen, cmd)
+            self.thread_it(subprocess.Popen, cmd, **_hidden_console_kwargs())
             return True
         except Exception as e:
             # 提供更友好的错误信息
@@ -377,7 +472,7 @@ class Tool:
 
             # Radmin连接命令：radmin.exe /connect:地址:端口
             cmd = f'"{radmin_path}" /connect:{host}:{port}'
-            self.thread_it(subprocess.Popen, cmd, shell=True)
+            self.thread_it(subprocess.Popen, cmd, shell=True, **_hidden_console_kwargs())
             return True
         except Exception as e:
             # 提供更友好的错误信息
