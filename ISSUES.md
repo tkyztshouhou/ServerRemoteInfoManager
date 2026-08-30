@@ -118,6 +118,8 @@
 | F15 | RDP 凭据异常残留清理 | `tools/tool.py:cleanup_rdp_credentials / cleanup_temp_rdp_files` | ✅ **已完成** | 启动时扫描清理孤儿 TERMSRV 凭据（开关 `rdp_cred_cleanup`，默认开启）+ 清理超过 1 小时的残留 `mstsc_*.rdp`；连接前清理（B62）保留为第二道防线（详见「七（续）」S6） |
 | F16 | FAQ 知识库功能 | `infoServer.py:2152 show_faq` / `faq/` 包 | ✅ **已完成** | 主界面 FAQ 按钮绑定 `show_faq`（`infoServer.py:348/353`，图片缺失时降级文字按钮）；`faq/` 包按 da / server / ui / main / sample_data 分层，独立库 `faq.db`；树形分类导航 + 关键词检索 + Markdown 渲染（缺 tkhtmlview 时降级纯文本）+ text/sql/doc 三种内容预览 |
 | F17 | 运维智脑（AI 聊天） | `opsbrain/` 包 / `infoServer.py:show_ops_brain` | ✅ **已完成**（2026-08-30） | 主界面 Ping 按钮下方新增「运维智脑」按钮（`infoServer.py` 新增 `opsbrain_btn_container` + `show_ops_brain`）；新建 `opsbrain/` 包分层实现（da 数据层 / service 功能层 / ui 界面层 / mdrender Markdown 渲染 / token 长度控制）；支持多模型配置（模型列表增删改、排序、密钥落库加密+界面遮蔽）、会话持久化（独立 `aichat.db`）、Markdown 渲染与代码块复制/另存、思考过程折叠、输入长度加权截断、流式/非流式双通道与停止生成（详见下方「九、运维智脑（F17）实现说明」） |
+| F19 | 运维智脑对话窗口滚动 | `opsbrain/ui.py` | ✅ **已完成**（2026-08-31） | 原对话窗口无滚动条且鼠标滚轮在消息区域失效，历史消息无法回看。4.0.20260831 在消息区右侧新增 `ttk.Scrollbar`（与 Canvas `yscrollcommand`/`yview` 双向绑定），并把 `<MouseWheel>` 同时绑定到 `msg_canvas`、`msg_inner` 以及每个 AI 回复 `tk.Text` 文本框（`add='+'` 转发），使滚轮在空白区和消息上均可正常翻页。注入 15 轮对话（30 条气泡，内容高度 2640px 超出视口）验证滚动条出现且可正常上下滚动。改动仅涉及 `opsbrain/ui.py` |
+| F20 | 运维智脑多轮上下文记忆 | `opsbrain/service.py` | ✅ **已完成**（2026-08-31） | 经核查，**多轮上下文记忆功能已正确实现**：`ChatService.send()` 每次请求通过 `chat_dao.list_messages(session_id)` 读取完整会话历史，作为 `api_messages`（system + 全部历史 + 当前输入）发送给模型；`truncate_context` 仅在超出 token 预算时裁剪，且始终保留 system 提示与最近消息，多轮交互连贯性不受影响。非流式与流式（SSE）两条路径均携带历史，无需改动 |
 
 ### 已关闭（评估后确定无需开发）
 
@@ -150,6 +152,14 @@
 - `更新说明.txt`：新增「★ 4.0.20260830 更新」块（运维智脑 AI 聊天、密码加密存储、导出/日志明文修复、update_server 注入加固、RDP 凭据残留清理、RDP 连接黑框修复、运维智脑按钮美化对齐、连接参数窗口加宽一倍、移除显示密钥复选框），并在「不兼容改动」补充密码加密存储说明
 - `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.0.20260830`；目录结构补充 `opsbrain/`、`tools/secret.py`
 - 关联条目：RDP 连接黑框闪烁修复见 **B67**（子进程附加 `CREATE_NO_WINDOW` + `SW_HIDE`），密码加密见 **S1**、SQL 注入加固见 **S3**、RDP 凭据残留清理见 **S6**、运维智脑实现见 **F17**
+
+### 5. 4.0.20260831 版本号更新（本轮）
+- `version.txt`：`filevers`/`prodvers` 改为 `(4, 0, 2026, 831)`，`FileVersion`/`ProductVersion` 改为 `4.0.20260831`（程序窗口标题从此文件读取）
+- `installer.iss`：`AppVersion` 与 `OutputBaseFilename` 同步为 `4.0.20260831`
+- `build_release.ps1`：`$Version` 同步为 `4.0.20260831`
+- `更新说明.txt`：新增「★ 4.0.20260831 更新」块（运维智脑对话窗口新增滚动条 + 修复滚轮翻页失效、上下文记忆核查确认已生效），顶部版本/日期更新
+- `README.md` / `ISSUES.md`：版本号、发布文件名、版本历史表、GitHub Tag 同步为 `4.0.20260831`；运维智脑章节补充「多轮上下文记忆」「对话窗口可滚动」说明；功能清单新增 **F19**（对话窗口滚动修复）、**F20**（上下文记忆确认正常）
+- 关联条目：运维智脑对话窗口滚动修复见 **F19**，多轮上下文记忆确认见 **F20**（均仅涉及 `opsbrain/ui.py` 与既有 `service.py`，无功能回归）
 
 ---
 

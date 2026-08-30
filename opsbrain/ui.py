@@ -86,14 +86,22 @@ class OpsBrainWindow(tk.Toplevel):
                   font=('Microsoft YaHei', 9),
                   command=self._rename_session).pack(side=tk.RIGHT, padx=8)
 
-        # 消息滚动区（Canvas + 内部 Frame）
-        self.msg_canvas = tk.Canvas(right, bg=BG, highlightthickness=0)
-        self.msg_canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+        # 消息滚动区（Canvas + 内部 Frame + 滚动条）
+        msg_area = tk.Frame(right, bg=BG)
+        msg_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+        self.msg_canvas = tk.Canvas(msg_area, bg=BG, highlightthickness=0)
+        self.msg_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.msg_scroll = ttk.Scrollbar(msg_area, orient=tk.VERTICAL,
+                                        command=self.msg_canvas.yview)
+        self.msg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.msg_canvas.configure(yscrollcommand=self.msg_scroll.set)
         self.msg_inner = tk.Frame(self.msg_canvas, bg=BG)
         self.msg_canvas.create_window((0, 0), window=self.msg_inner, anchor='nw')
         self.msg_canvas.bind('<Configure>', self._on_canvas_configure)
         self.msg_inner.bind('<Configure>', self._on_inner_configure)
+        # 鼠标滚轮：覆盖画布背景与内部容器（含消息气泡）
         self.msg_canvas.bind('<MouseWheel>', self._on_mousewheel)
+        self.msg_inner.bind('<MouseWheel>', self._on_mousewheel)
 
         # 底部输入区
         bottom = tk.Frame(right, bg='#FFFFFF')
@@ -239,6 +247,7 @@ class OpsBrainWindow(tk.Toplevel):
                        font=('Microsoft YaHei', 10), wrap='word',
                        padx=10, pady=8, state=tk.DISABLED)
         text.pack(fill=tk.X, expand=True)
+        text.bind('<MouseWheel>', lambda e: self._on_mousewheel(e), add='+')
         self._configure_tags(text)
         renderer = MarkdownRenderer(text, on_copy_code=self._copy_code,
                                     on_save_code=self._save_code)
@@ -394,6 +403,7 @@ class OpsBrainWindow(tk.Toplevel):
                        font=('Microsoft YaHei', 10), wrap='word',
                        padx=10, pady=8, state=tk.DISABLED)
         text.pack(fill=tk.X, expand=True)
+        text.bind('<MouseWheel>', lambda e: self._on_mousewheel(e), add='+')
         self._configure_tags(text)
         renderer = MarkdownRenderer(text, on_copy_code=self._copy_code,
                                     on_save_code=self._save_code)

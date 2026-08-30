@@ -52,6 +52,8 @@
 - Markdown 渲染：标题、列表、引用、代码块等；代码块内嵌「复制 / 另存为」按钮
 - 输入长度控制：提交时按所选模型 max_tokens 加权估算，超长自动截取（CJK 1.5 字符/token，其余 4 字符/token）
 - 流式/非流式双通道：支持打字机增量渲染与中途停止；后台线程请求，界面不卡死
+- 多轮上下文记忆：每次请求携带完整会话历史（system + 全部历史 + 当前输入），超长历史按 token 预算裁剪并保留最近消息，多轮交互连贯
+- 对话窗口可滚动：右侧可见垂直滚动条 + 鼠标滚轮（覆盖画布与消息气泡），可上下回看历史消息
 
 ### 远程桌面高级选项
 - 远程音频位置（本地 / 远程）
@@ -74,19 +76,19 @@
 ## 环境要求
 
 - **已发布版本（推荐）**：Windows 10 / 11 64 位，无需安装 Python 或任何依赖
-  - 安装版：`ServerRemoteInfoManager-4.0.20260830-Setup.exe`
-  - 绿色版：`ServerRemoteInfoManager-4.0.20260830-Portable.rar`（解压即用）
+  - 安装版：`ServerRemoteInfoManager-4.0.20260831-Setup.exe`
+  - 绿色版：`ServerRemoteInfoManager-4.0.20260831-Portable.rar`（解压即用）
 - **源码运行**：Python 3.10.11 + `tkinter`（标准库）、`Pillow`，Windows 操作系统
 
 ## 安装步骤
 
 ### 方式一：安装版（推荐）
-1. 双击 `ServerRemoteInfoManager-4.0.20260830-Setup.exe`
+1. 双击 `ServerRemoteInfoManager-4.0.20260831-Setup.exe`
 2. 按向导安装（默认安装到 `C:\Program Files\ServerRemoteInfoManager\`）
 3. 安装完成后从开始菜单或桌面快捷方式启动
 
 ### 方式二：绿色版
-1. 解压 `ServerRemoteInfoManager-4.0.20260830-Portable.rar`
+1. 解压 `ServerRemoteInfoManager-4.0.20260831-Portable.rar`
 2. 双击 `ServerRemoteInfoManager.exe` 直接运行，无需安装
 
 ### 方式三：源码运行
@@ -248,6 +250,7 @@ A：不会。Windows 下 ping 子进程已通过 `CREATE_NO_WINDOW` 隐藏，检
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| 4.0.20260831 | 2026-08-31 | **运维智脑对话窗口滚动修复**：新增可见垂直滚动条，修复鼠标滚轮翻页失效（滚轮覆盖画布与消息气泡，含 AI 回复文本框）；**上下文记忆核查**：确认多轮历史已正确随请求发送（system + 全部历史 + 当前输入），超长按 token 预算裁剪并保留最近消息 |
 | 4.0.20260830 | 2026-08-30 | **新增「运维智脑」AI 聊天**：主界面 Ping 按钮下方新增入口，分层 Python 包 `opsbrain/`（UI/功能/DA 分离）；支持多模型配置、会话持久化、Markdown 渲染与代码块操作、思考模式折叠、输入长度截断，并将「系统设置-连接参数」重构为模型配置面板；**密码加密存储**：新增 `tools/secret.py`（DPAPI 优先 + Fernet 回退），DA 层集成加解密并迁移历史明文密码，修复导出 JSON/主机日志明文密码、update_server 列名注入、RDP 凭据残留等问题；修复连接 RDP 时命令行黑框闪烁；运维智脑按钮与 Ping 按钮同尺寸对齐；连接参数窗口宽度由 400 扩大至 800 |
 | 3.0.20260827 | 2026-08-27 | **FAQ 知识库对话框完善**：新增/修改条目弹窗改为 grid 布局并居中显示，修复因 pack 的 expand 空间耗尽导致"保存/取消"按钮被压缩为 1px 不可见的问题；保存/取消按钮明确化（保存后状态栏反馈、ESC 关闭放弃更改）；**主窗口"保存设置"按钮美化**：绿系主色 + 悬停/按下明暗渐变、加粗字体、加大内边距、磁盘图标（💾）、手型光标，并完善默认/悬停/点击/禁用四态视觉反馈（新增 `set_rdp_save_enabled` 方法） |
 | 2.2.20260825 | 2026-08-25 | RDP 连接重构为临时 .rdp 配置文件 + 凭据管理器方式（连接前清理旧凭据、生成不含密码的临时配置文件、会话关闭后自动清理凭据与临时文件）；新增远程桌面高级选项（音频位置/剪贴板/驱动器映射/全屏/分辨率，持久化存储）；新增 Ping 批量检测（状态列绿✓/红✗）；新增服务器树下方左右布局功能区；密码列默认脱敏显示（右键可查看明文）；图标列缩小、IP地址列加宽；新增 FAQ 知识库按钮（占位）；顶部按钮区与相关标签不随界面背景变色；重命名分组（右键即时持久化）；编辑主机支持修改"主机类型"；窗口位置与大小记忆（关闭自动保存、启动自动恢复）；**发布独立 exe 安装版/绿色版（PyInstaller 打包，含运行环境，无需目标机装 Python）；修复 Ping 黑框、添加主机 exists 表名报错、exe 无图标、按钮图片缺失、保存设置失败（数据目录改 %LOCALAPPDATA%）** |
@@ -279,12 +282,12 @@ powershell -ExecutionPolicy Bypass -File .\build_release.ps1
 ### 产物
 | 文件 | 说明 | 体积（约） |
 |------|------|-----------|
-| `dist/ServerRemoteInfoManager-4.0.20260830-Setup.exe` | 安装版 | 14.8 MB |
-| `dist/ServerRemoteInfoManager-4.0.20260830-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
+| `dist/ServerRemoteInfoManager-4.0.20260831-Setup.exe` | 安装版 | 14.8 MB |
+| `dist/ServerRemoteInfoManager-4.0.20260831-Portable.rar` | 绿色版（解压即用） | 15.6 MB |
 | `dist/ServerRemoteInfoManager.exe` | 单文件 exe（备用） | 23.5 MB |
 
 ### 发布到 GitHub Release
-- Tag：`v4.0.20260830`
+- Tag：`v4.0.20260831`
 - 上传上述两个发行包作为附件
 - Release notes 复用 `更新说明.txt` 本次更新内容
 
